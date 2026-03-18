@@ -1,0 +1,11 @@
+dnd-dm-app/
+├── main.py              # Backend FastAPI (tout en un)
+├── prompts/
+│   └── system_prompt.txt # Ton prompt DM complet (copie-le depuis file:1)
+├── templates/
+│   └── index.html       # Interface web
+├── voices/
+│   └── fr_FR-siwis-medium.onnx       # voice model
+│   └── fr_FR-siwis-medium.onnx.json      
+└── requirements.txt     # Dépendances
+
