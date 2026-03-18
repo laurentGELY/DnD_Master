@@ -1,0 +1,1640 @@
+{
+  "bandit": {
+    "fr": [
+      "bandit",
+      "bandits"
+    ],
+    "HP": 11,
+    "AC": 12,
+    "ATK": "+3",
+    "DMG": "1d6+1",
+    "SPD": 30,
+    "STR": 11,
+    "DEX": 12,
+    "CON": 12,
+    "INT": 10,
+    "WIS": 10,
+    "CHA": 10,
+    "CR": "1/8",
+    "type": "humanoïde"
+  },
+  "bandit_captain": {
+    "fr": [
+      "capitaine bandit",
+      "capitaine de bandits"
+    ],
+    "HP": 65,
+    "AC": 15,
+    "ATK": "+4",
+    "DMG": "1d8+2",
+    "SPD": 30,
+    "STR": 15,
+    "DEX": 14,
+    "CON": 14,
+    "INT": 14,
+    "WIS": 11,
+    "CHA": 14,
+    "CR": "2",
+    "type": "humanoïde"
+  },
+  "berserker": {
+    "fr": [
+      "berserk",
+      "berserker"
+    ],
+    "HP": 67,
+    "AC": 13,
+    "ATK": "+5",
+    "DMG": "2d6+3",
+    "SPD": 30,
+    "STR": 16,
+    "DEX": 12,
+    "CON": 17,
+    "INT": 9,
+    "WIS": 11,
+    "CHA": 9,
+    "CR": "2",
+    "type": "humanoïde"
+  },
+  "guard": {
+    "fr": [
+      "garde",
+      "gardes",
+      "sentinelle"
+    ],
+    "HP": 11,
+    "AC": 16,
+    "ATK": "+3",
+    "DMG": "1d6+1",
+    "SPD": 30,
+    "STR": 13,
+    "DEX": 12,
+    "CON": 12,
+    "INT": 10,
+    "WIS": 11,
+    "CHA": 10,
+    "CR": "1/8",
+    "type": "humanoïde"
+  },
+  "knight": {
+    "fr": [
+      "chevalier",
+      "chevaliers"
+    ],
+    "HP": 52,
+    "AC": 18,
+    "ATK": "+5",
+    "DMG": "2d6+3",
+    "SPD": 30,
+    "STR": 16,
+    "DEX": 11,
+    "CON": 14,
+    "INT": 11,
+    "WIS": 11,
+    "CHA": 15,
+    "CR": "3",
+    "type": "humanoïde"
+  },
+  "mage_npc": {
+    "fr": [
+      "mage ennemi",
+      "sorcier ennemi",
+      "magicien ennemi"
+    ],
+    "HP": 40,
+    "AC": 13,
+    "ATK": "+6",
+    "DMG": "4d6",
+    "SPD": 30,
+    "STR": 9,
+    "DEX": 14,
+    "CON": 11,
+    "INT": 17,
+    "WIS": 12,
+    "CHA": 11,
+    "CR": "6",
+    "type": "humanoïde"
+  },
+  "priest": {
+    "fr": [
+      "prêtre",
+      "prêtres"
+    ],
+    "HP": 27,
+    "AC": 13,
+    "ATK": "+2",
+    "DMG": "1d6",
+    "SPD": 30,
+    "STR": 10,
+    "DEX": 10,
+    "CON": 12,
+    "INT": 13,
+    "WIS": 16,
+    "CHA": 13,
+    "CR": "2",
+    "type": "humanoïde"
+  },
+  "scout": {
+    "fr": [
+      "éclaireur",
+      "éclaireurs"
+    ],
+    "HP": 16,
+    "AC": 13,
+    "ATK": "+4",
+    "DMG": "1d6+2",
+    "SPD": 30,
+    "STR": 11,
+    "DEX": 14,
+    "CON": 12,
+    "INT": 11,
+    "WIS": 13,
+    "CHA": 11,
+    "CR": "1/2",
+    "type": "humanoïde"
+  },
+  "spy": {
+    "fr": [
+      "espion",
+      "espions"
+    ],
+    "HP": 27,
+    "AC": 12,
+    "ATK": "+4",
+    "DMG": "1d6+2",
+    "SPD": 30,
+    "STR": 10,
+    "DEX": 15,
+    "CON": 10,
+    "INT": 12,
+    "WIS": 14,
+    "CHA": 16,
+    "CR": "1",
+    "type": "humanoïde"
+  },
+  "thug": {
+    "fr": [
+      "voyou",
+      "voyous",
+      "brute"
+    ],
+    "HP": 32,
+    "AC": 11,
+    "ATK": "+4",
+    "DMG": "2d4+2",
+    "SPD": 30,
+    "STR": 15,
+    "DEX": 11,
+    "CON": 14,
+    "INT": 10,
+    "WIS": 10,
+    "CHA": 11,
+    "CR": "1/2",
+    "type": "humanoïde"
+  },
+  "goblin": {
+    "fr": [
+      "gobelin",
+      "gobelins",
+      "goblin"
+    ],
+    "HP": 7,
+    "AC": 15,
+    "ATK": "+4",
+    "DMG": "1d6+2",
+    "SPD": 30,
+    "STR": 8,
+    "DEX": 14,
+    "CON": 10,
+    "INT": 10,
+    "WIS": 8,
+    "CHA": 8,
+    "CR": "1/4",
+    "type": "humanoïde"
+  },
+  "goblin_boss": {
+    "fr": [
+      "chef gobelin",
+      "roi gobelin",
+      "boss gobelin"
+    ],
+    "HP": 21,
+    "AC": 17,
+    "ATK": "+4",
+    "DMG": "2d4+2",
+    "SPD": 30,
+    "STR": 10,
+    "DEX": 14,
+    "CON": 10,
+    "INT": 10,
+    "WIS": 8,
+    "CHA": 10,
+    "CR": "1",
+    "type": "humanoïde"
+  },
+  "hobgoblin": {
+    "fr": [
+      "hobgobelin",
+      "hobgobelins"
+    ],
+    "HP": 11,
+    "AC": 18,
+    "ATK": "+3",
+    "DMG": "1d8+1",
+    "SPD": 30,
+    "STR": 13,
+    "DEX": 12,
+    "CON": 12,
+    "INT": 10,
+    "WIS": 10,
+    "CHA": 9,
+    "CR": "1/2",
+    "type": "humanoïde"
+  },
+  "hobgoblin_captain": {
+    "fr": [
+      "capitaine hobgobelin"
+    ],
+    "HP": 52,
+    "AC": 17,
+    "ATK": "+5",
+    "DMG": "2d6+3",
+    "SPD": 30,
+    "STR": 16,
+    "DEX": 13,
+    "CON": 14,
+    "INT": 12,
+    "WIS": 10,
+    "CHA": 13,
+    "CR": "3",
+    "type": "humanoïde"
+  },
+  "kobold": {
+    "fr": [
+      "kobold",
+      "kobolds"
+    ],
+    "HP": 5,
+    "AC": 12,
+    "ATK": "+4",
+    "DMG": "1d4+2",
+    "SPD": 30,
+    "STR": 7,
+    "DEX": 15,
+    "CON": 9,
+    "INT": 8,
+    "WIS": 7,
+    "CHA": 8,
+    "CR": "1/8",
+    "type": "humanoïde"
+  },
+  "orc": {
+    "fr": [
+      "orc",
+      "orcs",
+      "orque",
+      "orques"
+    ],
+    "HP": 15,
+    "AC": 13,
+    "ATK": "+5",
+    "DMG": "1d12+3",
+    "SPD": 30,
+    "STR": 16,
+    "DEX": 12,
+    "CON": 16,
+    "INT": 7,
+    "WIS": 11,
+    "CHA": 10,
+    "CR": "1/2",
+    "type": "humanoïde"
+  },
+  "orc_war_chief": {
+    "fr": [
+      "chef de guerre orc",
+      "chef orc"
+    ],
+    "HP": 93,
+    "AC": 16,
+    "ATK": "+6",
+    "DMG": "2d8+4",
+    "SPD": 30,
+    "STR": 18,
+    "DEX": 12,
+    "CON": 18,
+    "INT": 11,
+    "WIS": 11,
+    "CHA": 16,
+    "CR": "4",
+    "type": "humanoïde"
+  },
+  "bugbear": {
+    "fr": [
+      "gobelours",
+      "bugbear"
+    ],
+    "HP": 27,
+    "AC": 16,
+    "ATK": "+4",
+    "DMG": "2d8+2",
+    "SPD": 30,
+    "STR": 15,
+    "DEX": 14,
+    "CON": 13,
+    "INT": 8,
+    "WIS": 9,
+    "CHA": 8,
+    "CR": "1",
+    "type": "humanoïde"
+  },
+  "gnoll": {
+    "fr": [
+      "gnoll",
+      "gnolls"
+    ],
+    "HP": 22,
+    "AC": 15,
+    "ATK": "+4",
+    "DMG": "1d8+2",
+    "SPD": 30,
+    "STR": 14,
+    "DEX": 12,
+    "CON": 11,
+    "INT": 6,
+    "WIS": 10,
+    "CHA": 7,
+    "CR": "1/2",
+    "type": "humanoïde"
+  },
+  "lizardfolk": {
+    "fr": [
+      "homme-lézard",
+      "hommes-lézards"
+    ],
+    "HP": 22,
+    "AC": 15,
+    "ATK": "+4",
+    "DMG": "1d6+2",
+    "SPD": 30,
+    "STR": 15,
+    "DEX": 10,
+    "CON": 13,
+    "INT": 7,
+    "WIS": 12,
+    "CHA": 7,
+    "CR": "1/2",
+    "type": "humanoïde"
+  },
+  "troglodyte": {
+    "fr": [
+      "troglodyte",
+      "troglodytes"
+    ],
+    "HP": 13,
+    "AC": 11,
+    "ATK": "+4",
+    "DMG": "1d4+2",
+    "SPD": 30,
+    "STR": 14,
+    "DEX": 10,
+    "CON": 14,
+    "INT": 6,
+    "WIS": 10,
+    "CHA": 6,
+    "CR": "1/4",
+    "type": "humanoïde"
+  },
+  "skeleton": {
+    "fr": [
+      "squelette",
+      "squelettes"
+    ],
+    "HP": 13,
+    "AC": 13,
+    "ATK": "+4",
+    "DMG": "1d6+2",
+    "SPD": 30,
+    "STR": 10,
+    "DEX": 14,
+    "CON": 15,
+    "INT": 6,
+    "WIS": 8,
+    "CHA": 5,
+    "CR": "1/4",
+    "type": "mort-vivant"
+  },
+  "zombie": {
+    "fr": [
+      "zombie",
+      "zombies"
+    ],
+    "HP": 22,
+    "AC": 8,
+    "ATK": "+3",
+    "DMG": "1d6+1",
+    "SPD": 20,
+    "STR": 13,
+    "DEX": 6,
+    "CON": 16,
+    "INT": 3,
+    "WIS": 6,
+    "CHA": 5,
+    "CR": "1/4",
+    "type": "mort-vivant"
+  },
+  "ghoul": {
+    "fr": [
+      "goule",
+      "goules"
+    ],
+    "HP": 22,
+    "AC": 12,
+    "ATK": "+2",
+    "DMG": "2d6+2",
+    "SPD": 30,
+    "STR": 13,
+    "DEX": 15,
+    "CON": 10,
+    "INT": 7,
+    "WIS": 10,
+    "CHA": 6,
+    "CR": "1",
+    "type": "mort-vivant"
+  },
+  "ghost": {
+    "fr": [
+      "fantôme",
+      "fantômes"
+    ],
+    "HP": 45,
+    "AC": 11,
+    "ATK": "+5",
+    "DMG": "4d6+3",
+    "SPD": 0,
+    "STR": 7,
+    "DEX": 13,
+    "CON": 10,
+    "INT": 10,
+    "WIS": 12,
+    "CHA": 17,
+    "CR": "4",
+    "type": "mort-vivant"
+  },
+  "specter": {
+    "fr": [
+      "spectre",
+      "spectres"
+    ],
+    "HP": 22,
+    "AC": 12,
+    "ATK": "+4",
+    "DMG": "3d6",
+    "SPD": 0,
+    "STR": 1,
+    "DEX": 14,
+    "CON": 11,
+    "INT": 10,
+    "WIS": 10,
+    "CHA": 11,
+    "CR": "1",
+    "type": "mort-vivant"
+  },
+  "wight": {
+    "fr": [
+      "wight",
+      "revenant"
+    ],
+    "HP": 45,
+    "AC": 14,
+    "ATK": "+4",
+    "DMG": "2d6+2",
+    "SPD": 30,
+    "STR": 15,
+    "DEX": 14,
+    "CON": 16,
+    "INT": 10,
+    "WIS": 13,
+    "CHA": 15,
+    "CR": "3",
+    "type": "mort-vivant"
+  },
+  "wraith": {
+    "fr": [
+      "ombre",
+      "wraith"
+    ],
+    "HP": 67,
+    "AC": 13,
+    "ATK": "+6",
+    "DMG": "4d8+3",
+    "SPD": 0,
+    "STR": 6,
+    "DEX": 16,
+    "CON": 16,
+    "INT": 12,
+    "WIS": 14,
+    "CHA": 15,
+    "CR": "5",
+    "type": "mort-vivant"
+  },
+  "vampire_spawn": {
+    "fr": [
+      "rejeton vampire"
+    ],
+    "HP": 82,
+    "AC": 15,
+    "ATK": "+6",
+    "DMG": "2d6+4",
+    "SPD": 30,
+    "STR": 16,
+    "DEX": 16,
+    "CON": 16,
+    "INT": 11,
+    "WIS": 10,
+    "CHA": 12,
+    "CR": "5",
+    "type": "mort-vivant"
+  },
+  "vampire": {
+    "fr": [
+      "vampire",
+      "vampires"
+    ],
+    "HP": 144,
+    "AC": 16,
+    "ATK": "+9",
+    "DMG": "2d6+6",
+    "SPD": 30,
+    "STR": 18,
+    "DEX": 18,
+    "CON": 18,
+    "INT": 17,
+    "WIS": 15,
+    "CHA": 18,
+    "CR": "13",
+    "type": "mort-vivant"
+  },
+  "lich": {
+    "fr": [
+      "liche",
+      "lich"
+    ],
+    "HP": 135,
+    "AC": 17,
+    "ATK": "+12",
+    "DMG": "4d6+5",
+    "SPD": 30,
+    "STR": 11,
+    "DEX": 16,
+    "CON": 16,
+    "INT": 20,
+    "WIS": 14,
+    "CHA": 16,
+    "CR": "21",
+    "type": "mort-vivant"
+  },
+  "shadow": {
+    "fr": [
+      "ombre furtive"
+    ],
+    "HP": 16,
+    "AC": 12,
+    "ATK": "+4",
+    "DMG": "2d6+2",
+    "SPD": 40,
+    "STR": 6,
+    "DEX": 14,
+    "CON": 13,
+    "INT": 6,
+    "WIS": 10,
+    "CHA": 8,
+    "CR": "1/2",
+    "type": "mort-vivant"
+  },
+  "banshee": {
+    "fr": [
+      "banshee",
+      "banshees"
+    ],
+    "HP": 58,
+    "AC": 12,
+    "ATK": "+4",
+    "DMG": "3d6",
+    "SPD": 0,
+    "STR": 1,
+    "DEX": 14,
+    "CON": 10,
+    "INT": 12,
+    "WIS": 11,
+    "CHA": 17,
+    "CR": "4",
+    "type": "mort-vivant"
+  },
+  "will_o_wisp": {
+    "fr": [
+      "feu follet",
+      "feux follets"
+    ],
+    "HP": 22,
+    "AC": 19,
+    "ATK": "+4",
+    "DMG": "2d8",
+    "SPD": 0,
+    "STR": 1,
+    "DEX": 28,
+    "CON": 10,
+    "INT": 13,
+    "WIS": 14,
+    "CHA": 11,
+    "CR": "2",
+    "type": "mort-vivant"
+  },
+  "wolf": {
+    "fr": [
+      "loup",
+      "loups"
+    ],
+    "HP": 11,
+    "AC": 13,
+    "ATK": "+4",
+    "DMG": "2d4+2",
+    "SPD": 40,
+    "STR": 12,
+    "DEX": 15,
+    "CON": 12,
+    "INT": 3,
+    "WIS": 12,
+    "CHA": 6,
+    "CR": "1/4",
+    "type": "bête"
+  },
+  "dire_wolf": {
+    "fr": [
+      "loup géant",
+      "loup terrible"
+    ],
+    "HP": 37,
+    "AC": 14,
+    "ATK": "+5",
+    "DMG": "2d6+3",
+    "SPD": 50,
+    "STR": 17,
+    "DEX": 15,
+    "CON": 15,
+    "INT": 3,
+    "WIS": 12,
+    "CHA": 7,
+    "CR": "1",
+    "type": "bête"
+  },
+  "brown_bear": {
+    "fr": [
+      "ours brun",
+      "ours"
+    ],
+    "HP": 34,
+    "AC": 11,
+    "ATK": "+5",
+    "DMG": "2d6+4",
+    "SPD": 40,
+    "STR": 19,
+    "DEX": 10,
+    "CON": 16,
+    "INT": 2,
+    "WIS": 13,
+    "CHA": 7,
+    "CR": "1",
+    "type": "bête"
+  },
+  "giant_spider": {
+    "fr": [
+      "araignée géante",
+      "araignées géantes"
+    ],
+    "HP": 26,
+    "AC": 14,
+    "ATK": "+5",
+    "DMG": "1d8+3",
+    "SPD": 30,
+    "STR": 14,
+    "DEX": 16,
+    "CON": 12,
+    "INT": 2,
+    "WIS": 11,
+    "CHA": 4,
+    "CR": "1",
+    "type": "bête"
+  },
+  "giant_rat": {
+    "fr": [
+      "rat géant",
+      "rats géants"
+    ],
+    "HP": 7,
+    "AC": 12,
+    "ATK": "+4",
+    "DMG": "1d4+2",
+    "SPD": 30,
+    "STR": 7,
+    "DEX": 15,
+    "CON": 11,
+    "INT": 2,
+    "WIS": 10,
+    "CHA": 4,
+    "CR": "1/8",
+    "type": "bête"
+  },
+  "giant_bat": {
+    "fr": [
+      "chauve-souris géante"
+    ],
+    "HP": 22,
+    "AC": 13,
+    "ATK": "+4",
+    "DMG": "1d6+2",
+    "SPD": 10,
+    "STR": 15,
+    "DEX": 16,
+    "CON": 11,
+    "INT": 2,
+    "WIS": 12,
+    "CHA": 6,
+    "CR": "1/4",
+    "type": "bête"
+  },
+  "panther": {
+    "fr": [
+      "panthère",
+      "jaguar"
+    ],
+    "HP": 13,
+    "AC": 12,
+    "ATK": "+4",
+    "DMG": "1d6+2",
+    "SPD": 50,
+    "STR": 14,
+    "DEX": 15,
+    "CON": 10,
+    "INT": 3,
+    "WIS": 14,
+    "CHA": 7,
+    "CR": "1/4",
+    "type": "bête"
+  },
+  "tiger": {
+    "fr": [
+      "tigre",
+      "tigres"
+    ],
+    "HP": 37,
+    "AC": 12,
+    "ATK": "+5",
+    "DMG": "1d10+3",
+    "SPD": 40,
+    "STR": 17,
+    "DEX": 15,
+    "CON": 14,
+    "INT": 3,
+    "WIS": 12,
+    "CHA": 8,
+    "CR": "1",
+    "type": "bête"
+  },
+  "giant_eagle": {
+    "fr": [
+      "aigle géant",
+      "aigles géants"
+    ],
+    "HP": 26,
+    "AC": 13,
+    "ATK": "+5",
+    "DMG": "1d8+3",
+    "SPD": 10,
+    "STR": 16,
+    "DEX": 17,
+    "CON": 13,
+    "INT": 8,
+    "WIS": 14,
+    "CHA": 10,
+    "CR": "1",
+    "type": "bête"
+  },
+  "giant_scorpion": {
+    "fr": [
+      "scorpion géant"
+    ],
+    "HP": 52,
+    "AC": 15,
+    "ATK": "+4",
+    "DMG": "1d8+2",
+    "SPD": 40,
+    "STR": 15,
+    "DEX": 13,
+    "CON": 15,
+    "INT": 1,
+    "WIS": 9,
+    "CHA": 3,
+    "CR": "3",
+    "type": "bête"
+  },
+  "giant_toad": {
+    "fr": [
+      "crapaud géant"
+    ],
+    "HP": 39,
+    "AC": 11,
+    "ATK": "+4",
+    "DMG": "1d10+2",
+    "SPD": 20,
+    "STR": 15,
+    "DEX": 13,
+    "CON": 13,
+    "INT": 2,
+    "WIS": 10,
+    "CHA": 3,
+    "CR": "1",
+    "type": "bête"
+  },
+  "roc": {
+    "fr": [
+      "rok",
+      "roc"
+    ],
+    "HP": 248,
+    "AC": 15,
+    "ATK": "+13",
+    "DMG": "4d8+9",
+    "SPD": 20,
+    "STR": 28,
+    "DEX": 10,
+    "CON": 20,
+    "INT": 3,
+    "WIS": 10,
+    "CHA": 9,
+    "CR": "11",
+    "type": "bête"
+  },
+  "gelatinous_cube": {
+    "fr": [
+      "cube gélatineux"
+    ],
+    "HP": 84,
+    "AC": 6,
+    "ATK": "+4",
+    "DMG": "3d6",
+    "SPD": 15,
+    "STR": 14,
+    "DEX": 3,
+    "CON": 20,
+    "INT": 1,
+    "WIS": 6,
+    "CHA": 1,
+    "CR": "2",
+    "type": "vase"
+  },
+  "ochre_jelly": {
+    "fr": [
+      "gelée ocre"
+    ],
+    "HP": 45,
+    "AC": 8,
+    "ATK": "+4",
+    "DMG": "2d6+2",
+    "SPD": 10,
+    "STR": 15,
+    "DEX": 6,
+    "CON": 14,
+    "INT": 2,
+    "WIS": 6,
+    "CHA": 1,
+    "CR": "2",
+    "type": "vase"
+  },
+  "black_pudding": {
+    "fr": [
+      "pudding noir"
+    ],
+    "HP": 85,
+    "AC": 7,
+    "ATK": "+5",
+    "DMG": "3d8+3",
+    "SPD": 20,
+    "STR": 16,
+    "DEX": 5,
+    "CON": 16,
+    "INT": 1,
+    "WIS": 6,
+    "CHA": 1,
+    "CR": "4",
+    "type": "vase"
+  },
+  "gargoyle": {
+    "fr": [
+      "gargouille",
+      "gargouilles"
+    ],
+    "HP": 52,
+    "AC": 15,
+    "ATK": "+4",
+    "DMG": "1d6+2",
+    "SPD": 30,
+    "STR": 15,
+    "DEX": 11,
+    "CON": 16,
+    "INT": 6,
+    "WIS": 11,
+    "CHA": 7,
+    "CR": "2",
+    "type": "élémentaire"
+  },
+  "air_elemental": {
+    "fr": [
+      "élémentaire de l'air",
+      "élémentaire air"
+    ],
+    "HP": 90,
+    "AC": 15,
+    "ATK": "+8",
+    "DMG": "2d8+5",
+    "SPD": 0,
+    "STR": 14,
+    "DEX": 20,
+    "CON": 14,
+    "INT": 6,
+    "WIS": 10,
+    "CHA": 6,
+    "CR": "5",
+    "type": "élémentaire"
+  },
+  "earth_elemental": {
+    "fr": [
+      "élémentaire de la terre"
+    ],
+    "HP": 126,
+    "AC": 17,
+    "ATK": "+8",
+    "DMG": "2d8+5",
+    "SPD": 30,
+    "STR": 20,
+    "DEX": 8,
+    "CON": 20,
+    "INT": 5,
+    "WIS": 10,
+    "CHA": 5,
+    "CR": "5",
+    "type": "élémentaire"
+  },
+  "fire_elemental": {
+    "fr": [
+      "élémentaire de feu"
+    ],
+    "HP": 102,
+    "AC": 13,
+    "ATK": "+6",
+    "DMG": "2d6+3",
+    "SPD": 50,
+    "STR": 10,
+    "DEX": 17,
+    "CON": 16,
+    "INT": 6,
+    "WIS": 10,
+    "CHA": 7,
+    "CR": "5",
+    "type": "élémentaire"
+  },
+  "water_elemental": {
+    "fr": [
+      "élémentaire de l'eau"
+    ],
+    "HP": 114,
+    "AC": 14,
+    "ATK": "+7",
+    "DMG": "2d8+4",
+    "SPD": 30,
+    "STR": 18,
+    "DEX": 14,
+    "CON": 18,
+    "INT": 5,
+    "WIS": 10,
+    "CHA": 8,
+    "CR": "5",
+    "type": "élémentaire"
+  },
+  "imp": {
+    "fr": [
+      "diablotin",
+      "imp"
+    ],
+    "HP": 10,
+    "AC": 13,
+    "ATK": "+5",
+    "DMG": "1d4+3",
+    "SPD": 20,
+    "STR": 6,
+    "DEX": 17,
+    "CON": 13,
+    "INT": 11,
+    "WIS": 12,
+    "CHA": 14,
+    "CR": "1",
+    "type": "fiélon"
+  },
+  "hell_hound": {
+    "fr": [
+      "chien des enfers",
+      "chien infernal"
+    ],
+    "HP": 45,
+    "AC": 15,
+    "ATK": "+5",
+    "DMG": "2d8+3",
+    "SPD": 50,
+    "STR": 17,
+    "DEX": 12,
+    "CON": 14,
+    "INT": 6,
+    "WIS": 13,
+    "CHA": 6,
+    "CR": "3",
+    "type": "fiélon"
+  },
+  "succubus": {
+    "fr": [
+      "succube",
+      "incube"
+    ],
+    "HP": 66,
+    "AC": 13,
+    "ATK": "+5",
+    "DMG": "1d6+3",
+    "SPD": 30,
+    "STR": 8,
+    "DEX": 17,
+    "CON": 13,
+    "INT": 15,
+    "WIS": 12,
+    "CHA": 20,
+    "CR": "4",
+    "type": "fiélon"
+  },
+  "harpy": {
+    "fr": [
+      "harpie",
+      "harpies"
+    ],
+    "HP": 38,
+    "AC": 11,
+    "ATK": "+3",
+    "DMG": "2d4+1",
+    "SPD": 20,
+    "STR": 12,
+    "DEX": 13,
+    "CON": 12,
+    "INT": 7,
+    "WIS": 10,
+    "CHA": 13,
+    "CR": "1",
+    "type": "monstruosité"
+  },
+  "medusa": {
+    "fr": [
+      "méduse",
+      "méduses"
+    ],
+    "HP": 127,
+    "AC": 15,
+    "ATK": "+5",
+    "DMG": "1d8+3",
+    "SPD": 30,
+    "STR": 10,
+    "DEX": 15,
+    "CON": 16,
+    "INT": 12,
+    "WIS": 13,
+    "CHA": 15,
+    "CR": "6",
+    "type": "monstruosité"
+  },
+  "minotaur": {
+    "fr": [
+      "minotaure",
+      "minotaures"
+    ],
+    "HP": 114,
+    "AC": 14,
+    "ATK": "+6",
+    "DMG": "2d12+4",
+    "SPD": 40,
+    "STR": 18,
+    "DEX": 11,
+    "CON": 16,
+    "INT": 6,
+    "WIS": 16,
+    "CHA": 9,
+    "CR": "3",
+    "type": "monstruosité"
+  },
+  "manticore": {
+    "fr": [
+      "manticore",
+      "manticores"
+    ],
+    "HP": 68,
+    "AC": 14,
+    "ATK": "+5",
+    "DMG": "2d6+3",
+    "SPD": 30,
+    "STR": 17,
+    "DEX": 16,
+    "CON": 17,
+    "INT": 7,
+    "WIS": 12,
+    "CHA": 8,
+    "CR": "3",
+    "type": "monstruosité"
+  },
+  "basilisk": {
+    "fr": [
+      "basilic",
+      "basilics"
+    ],
+    "HP": 52,
+    "AC": 15,
+    "ATK": "+4",
+    "DMG": "2d8+2",
+    "SPD": 20,
+    "STR": 16,
+    "DEX": 8,
+    "CON": 15,
+    "INT": 2,
+    "WIS": 8,
+    "CHA": 7,
+    "CR": "3",
+    "type": "monstruosité"
+  },
+  "cockatrice": {
+    "fr": [
+      "cockatrice"
+    ],
+    "HP": 27,
+    "AC": 11,
+    "ATK": "+3",
+    "DMG": "1d4+1",
+    "SPD": 20,
+    "STR": 6,
+    "DEX": 12,
+    "CON": 12,
+    "INT": 2,
+    "WIS": 13,
+    "CHA": 5,
+    "CR": "1/2",
+    "type": "monstruosité"
+  },
+  "griffon": {
+    "fr": [
+      "griffon",
+      "griffons"
+    ],
+    "HP": 59,
+    "AC": 12,
+    "ATK": "+6",
+    "DMG": "2d8+4",
+    "SPD": 30,
+    "STR": 18,
+    "DEX": 15,
+    "CON": 16,
+    "INT": 2,
+    "WIS": 13,
+    "CHA": 8,
+    "CR": "2",
+    "type": "monstruosité"
+  },
+  "hippogriff": {
+    "fr": [
+      "hippogriffe"
+    ],
+    "HP": 19,
+    "AC": 11,
+    "ATK": "+5",
+    "DMG": "2d6+3",
+    "SPD": 40,
+    "STR": 17,
+    "DEX": 13,
+    "CON": 13,
+    "INT": 2,
+    "WIS": 12,
+    "CHA": 8,
+    "CR": "1",
+    "type": "monstruosité"
+  },
+  "owlbear": {
+    "fr": [
+      "owlbear",
+      "hiboursonne",
+      "ours-chouette"
+    ],
+    "HP": 59,
+    "AC": 13,
+    "ATK": "+7",
+    "DMG": "2d8+5",
+    "SPD": 40,
+    "STR": 20,
+    "DEX": 12,
+    "CON": 17,
+    "INT": 3,
+    "WIS": 12,
+    "CHA": 7,
+    "CR": "3",
+    "type": "monstruosité"
+  },
+  "wyvern": {
+    "fr": [
+      "wyverne"
+    ],
+    "HP": 110,
+    "AC": 13,
+    "ATK": "+7",
+    "DMG": "2d6+4",
+    "SPD": 20,
+    "STR": 19,
+    "DEX": 10,
+    "CON": 16,
+    "INT": 5,
+    "WIS": 12,
+    "CHA": 6,
+    "CR": "6",
+    "type": "dragon"
+  },
+  "young_black_dragon": {
+    "fr": [
+      "jeune dragon noir"
+    ],
+    "HP": 127,
+    "AC": 18,
+    "ATK": "+6",
+    "DMG": "2d10+4",
+    "SPD": 40,
+    "STR": 19,
+    "DEX": 14,
+    "CON": 17,
+    "INT": 12,
+    "WIS": 11,
+    "CHA": 15,
+    "CR": "7",
+    "type": "dragon"
+  },
+  "young_green_dragon": {
+    "fr": [
+      "jeune dragon vert"
+    ],
+    "HP": 136,
+    "AC": 18,
+    "ATK": "+7",
+    "DMG": "2d10+4",
+    "SPD": 40,
+    "STR": 19,
+    "DEX": 12,
+    "CON": 17,
+    "INT": 16,
+    "WIS": 13,
+    "CHA": 15,
+    "CR": "8",
+    "type": "dragon"
+  },
+  "young_red_dragon": {
+    "fr": [
+      "jeune dragon rouge"
+    ],
+    "HP": 178,
+    "AC": 18,
+    "ATK": "+8",
+    "DMG": "2d10+5",
+    "SPD": 40,
+    "STR": 23,
+    "DEX": 10,
+    "CON": 21,
+    "INT": 14,
+    "WIS": 11,
+    "CHA": 19,
+    "CR": "10",
+    "type": "dragon"
+  },
+  "ogre": {
+    "fr": [
+      "ogre",
+      "ogres"
+    ],
+    "HP": 59,
+    "AC": 11,
+    "ATK": "+6",
+    "DMG": "2d8+4",
+    "SPD": 40,
+    "STR": 19,
+    "DEX": 8,
+    "CON": 16,
+    "INT": 5,
+    "WIS": 7,
+    "CHA": 7,
+    "CR": "2",
+    "type": "géant"
+  },
+  "troll": {
+    "fr": [
+      "troll",
+      "trolls"
+    ],
+    "HP": 84,
+    "AC": 15,
+    "ATK": "+7",
+    "DMG": "2d6+4",
+    "SPD": 30,
+    "STR": 18,
+    "DEX": 13,
+    "CON": 20,
+    "INT": 7,
+    "WIS": 9,
+    "CHA": 7,
+    "CR": "5",
+    "type": "géant"
+  },
+  "hill_giant": {
+    "fr": [
+      "géant des collines",
+      "géant colline"
+    ],
+    "HP": 105,
+    "AC": 13,
+    "ATK": "+8",
+    "DMG": "3d8+5",
+    "SPD": 40,
+    "STR": 21,
+    "DEX": 8,
+    "CON": 19,
+    "INT": 5,
+    "WIS": 9,
+    "CHA": 6,
+    "CR": "5",
+    "type": "géant"
+  },
+  "frost_giant": {
+    "fr": [
+      "géant du givre"
+    ],
+    "HP": 138,
+    "AC": 15,
+    "ATK": "+9",
+    "DMG": "3d12+6",
+    "SPD": 40,
+    "STR": 23,
+    "DEX": 9,
+    "CON": 21,
+    "INT": 9,
+    "WIS": 10,
+    "CHA": 12,
+    "CR": "8",
+    "type": "géant"
+  },
+  "animated_armor": {
+    "fr": [
+      "armure animée"
+    ],
+    "HP": 33,
+    "AC": 18,
+    "ATK": "+4",
+    "DMG": "1d6+2",
+    "SPD": 25,
+    "STR": 14,
+    "DEX": 11,
+    "CON": 13,
+    "INT": 1,
+    "WIS": 3,
+    "CHA": 1,
+    "CR": "1",
+    "type": "construction"
+  },
+  "golem_clay": {
+    "fr": [
+      "golem d'argile"
+    ],
+    "HP": 133,
+    "AC": 14,
+    "ATK": "+8",
+    "DMG": "3d8+5",
+    "SPD": 20,
+    "STR": 20,
+    "DEX": 9,
+    "CON": 18,
+    "INT": 3,
+    "WIS": 8,
+    "CHA": 1,
+    "CR": "9",
+    "type": "construction"
+  },
+  "golem_stone": {
+    "fr": [
+      "golem de pierre"
+    ],
+    "HP": 178,
+    "AC": 17,
+    "ATK": "+10",
+    "DMG": "3d10+6",
+    "SPD": 30,
+    "STR": 22,
+    "DEX": 9,
+    "CON": 20,
+    "INT": 3,
+    "WIS": 11,
+    "CHA": 1,
+    "CR": "10",
+    "type": "construction"
+  },
+  "doppelganger": {
+    "fr": [
+      "doppelganger",
+      "changelin"
+    ],
+    "HP": 52,
+    "AC": 14,
+    "ATK": "+6",
+    "DMG": "2d6+4",
+    "SPD": 30,
+    "STR": 11,
+    "DEX": 18,
+    "CON": 14,
+    "INT": 11,
+    "WIS": 12,
+    "CHA": 14,
+    "CR": "3",
+    "type": "monstruosité"
+  },
+  "werewolf": {
+    "fr": [
+      "loup-garou",
+      "loups-garous"
+    ],
+    "HP": 58,
+    "AC": 11,
+    "ATK": "+4",
+    "DMG": "2d8+2",
+    "SPD": 30,
+    "STR": 15,
+    "DEX": 13,
+    "CON": 14,
+    "INT": 10,
+    "WIS": 11,
+    "CHA": 10,
+    "CR": "3",
+    "type": "humanoïde"
+  },
+  "beholder": {
+    "fr": [
+      "beholder",
+      "scrutateur",
+      "tyran oculaire"
+    ],
+    "HP": 180,
+    "AC": 18,
+    "ATK": "+9",
+    "DMG": "4d6+5",
+    "SPD": 0,
+    "STR": 10,
+    "DEX": 14,
+    "CON": 18,
+    "INT": 17,
+    "WIS": 15,
+    "CHA": 17,
+    "CR": "13",
+    "type": "aberration"
+  },
+  "mind_flayer": {
+    "fr": [
+      "flagelleur mental",
+      "illithid"
+    ],
+    "HP": 71,
+    "AC": 15,
+    "ATK": "+7",
+    "DMG": "2d8+4",
+    "SPD": 30,
+    "STR": 11,
+    "DEX": 12,
+    "CON": 12,
+    "INT": 19,
+    "WIS": 17,
+    "CHA": 17,
+    "CR": "7",
+    "type": "aberration"
+  },
+  "aboleth": {
+    "fr": [
+      "aboleth"
+    ],
+    "HP": 135,
+    "AC": 17,
+    "ATK": "+9",
+    "DMG": "2d6+5",
+    "SPD": 10,
+    "STR": 21,
+    "DEX": 9,
+    "CON": 15,
+    "INT": 18,
+    "WIS": 15,
+    "CHA": 18,
+    "CR": "10",
+    "type": "aberration"
+  },
+  "stirge": {
+    "fr": [
+      "stirge",
+      "stirges"
+    ],
+    "HP": 2,
+    "AC": 14,
+    "ATK": "+5",
+    "DMG": "1d4+3",
+    "SPD": 10,
+    "STR": 4,
+    "DEX": 16,
+    "CON": 11,
+    "INT": 2,
+    "WIS": 8,
+    "CHA": 6,
+    "CR": "1/8",
+    "type": "bête"
+  },
+  "giant_centipede": {
+    "fr": [
+      "mille-pattes géant",
+      "scolopendre géante"
+    ],
+    "HP": 4,
+    "AC": 13,
+    "ATK": "+4",
+    "DMG": "1d4+2",
+    "SPD": 30,
+    "STR": 5,
+    "DEX": 14,
+    "CON": 12,
+    "INT": 1,
+    "WIS": 7,
+    "CHA": 3,
+    "CR": "1/4",
+    "type": "bête"
+  },
+  "yuan_ti_pureblood": {
+    "fr": [
+      "yuan-ti de sang pur",
+      "yuan-ti"
+    ],
+    "HP": 40,
+    "AC": 11,
+    "ATK": "+4",
+    "DMG": "1d6+2",
+    "SPD": 30,
+    "STR": 11,
+    "DEX": 12,
+    "CON": 13,
+    "INT": 14,
+    "WIS": 13,
+    "CHA": 14,
+    "CR": "1",
+    "type": "monstruosité"
+  },
+  "naga_spirit": {
+    "fr": [
+      "naga spirituel",
+      "naga"
+    ],
+    "HP": 75,
+    "AC": 15,
+    "ATK": "+6",
+    "DMG": "2d6+3",
+    "SPD": 40,
+    "STR": 18,
+    "DEX": 17,
+    "CON": 14,
+    "INT": 16,
+    "WIS": 15,
+    "CHA": 16,
+    "CR": "8",
+    "type": "mort-vivant"
+  },
+  "purple_worm": {
+    "fr": [
+      "ver pourpre"
+    ],
+    "HP": 247,
+    "AC": 18,
+    "ATK": "+14",
+    "DMG": "3d8+9",
+    "SPD": 50,
+    "STR": 28,
+    "DEX": 7,
+    "CON": 22,
+    "INT": 1,
+    "WIS": 8,
+    "CHA": 4,
+    "CR": "15",
+    "type": "monstruosité"
+  }
+}

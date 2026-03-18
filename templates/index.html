@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>D&D 5e — Dungeon Master</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: #0f0f13;
+            color: #e8e6e0;
+            font-family: system-ui, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── Topbar ── */
+        .topbar {
+            padding: 14px 32px;
+            border-bottom: 0.5px solid #2a2830;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+        .logo { font-size: 17px; font-weight: 500; color: #c9a96e; letter-spacing: 0.03em; }
+        .topbar-meta { font-size: 12px; color: #5a5860; display: flex; gap: 20px; align-items: center; }
+
+        /* Indicateur du personnage actif dans la topbar */
+        .active-indicator {
+            font-size: 12px;
+            color: #c9a96e;
+            font-weight: 500;
+            padding: 2px 8px;
+            border: 0.5px solid #c9a96e44;
+            border-radius: 4px;
+        }
+
+        /* ── Layout ── */
+        .main {
+            flex: 1;
+            display: flex;
+            min-height: 0;
+        }
+
+        /* ── Colonne chat ── */
+        .col-chat {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            padding: 0 24px 0 32px;
+            border-right: 0.5px solid #1e1c24;
+        }
+
+        .chat {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px 0 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+        .chat::-webkit-scrollbar { width: 4px; }
+        .chat::-webkit-scrollbar-track { background: transparent; }
+        .chat::-webkit-scrollbar-thumb { background: #2a2830; border-radius: 2px; }
+
+        .msg { display: flex; flex-direction: column; gap: 4px; }
+        .msg-role { font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; }
+        .msg.dm .msg-role     { color: #c9a96e; }
+        .msg.player .msg-role { color: #6b8cba; }
+        .msg-text { font-size: 14px; line-height: 1.75; color: #ffffff; }
+        .msg.player .msg-text { color: #cce0ff; }
+        .empty-state { color: #3e3c44; font-size: 14px; font-style: italic; padding-top: 12px; }
+        .divider { height: 0.5px; background: #1a1820; flex-shrink: 0; }
+
+        /* ── Zone de saisie ── */
+        .input-section {
+            flex-shrink: 0;
+            border-top: 0.5px solid #1e1c24;
+            padding: 12px 0;
+        }
+
+        /* Sélecteur de personnage actif + dés sur la même ligne */
+        .controls-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        /* Boutons de sélection du personnage actif */
+        .char-selector-label {
+            font-size: 11px;
+            color: #3e3c44;
+            white-space: nowrap;
+        }
+        .btn-char {
+            background: #17151f;
+            border: 0.5px solid #2a2830;
+            color: #8a8690;
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.15s;
+        }
+        .btn-char:hover { border-color: #6b8cba; color: #6b8cba; }
+        /* Personnage actif — surligné en or */
+        .btn-char.active {
+            background: #1e1a10;
+            border-color: #c9a96e;
+            color: #c9a96e;
+            font-weight: 600;
+        }
+
+        /* Séparateur vertical entre sélecteur et dés */
+        .bar-sep {
+            width: 0.5px;
+            height: 18px;
+            background: #2a2830;
+            flex-shrink: 0;
+            margin: 0 4px;
+        }
+
+        /* Barre de dés */
+        .dice-label { font-size: 11px; color: #3e3c44; white-space: nowrap; }
+        .btn-die {
+            background: #17151f;
+            border: 0.5px solid #2a2830;
+            color: #8a8690;
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-size: 12px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: border-color 0.15s, color 0.15s;
+        }
+        .btn-die:hover  { border-color: #c9a96e; color: #c9a96e; }
+        .btn-die:active { transform: scale(0.95); }
+
+        .dice-result {
+            margin-left: auto;
+            font-size: 12px;
+            color: #c9a96e;
+            font-weight: 500;
+            min-width: 80px;
+            text-align: right;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .dice-result.visible { opacity: 1; }
+
+        /* Formulaire */
+        .input-area { display: flex; gap: 10px; align-items: stretch; }
+        .input-area textarea {
+            flex: 1;
+            background: #17151f;
+            border: 0.5px solid #2a2830;
+            border-radius: 8px;
+            color: #e8e6e0;
+            font-size: 14px;
+            font-family: inherit;
+            padding: 10px 14px;
+            resize: none;
+            line-height: 1.65;
+            outline: none;
+            min-height: 68px;
+        }
+        .input-area textarea:focus { border-color: #4a4260; }
+        .input-area textarea::placeholder { color: #3e3c44; }
+
+        .btn-col { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+        .btn-send {
+            background: #c9a96e; color: #0f0f13; border: none;
+            border-radius: 8px; padding: 0 20px; font-size: 13px;
+            font-weight: 600; cursor: pointer; flex: 1; white-space: nowrap;
+        }
+        .btn-send:hover  { background: #d9bc85; }
+        .btn-send:active { transform: scale(0.98); }
+        .btn-tts {
+            background: transparent; border: 0.5px solid #2a2830;
+            color: #8a8690; border-radius: 8px; padding: 0 20px;
+            font-size: 13px; cursor: pointer; flex: 1; white-space: nowrap;
+        }
+        .btn-tts:hover   { border-color: #4a4260; color: #c9a96e; }
+        .btn-tts.playing { color: #c9a96e; border-color: #c9a96e; }
+
+        /* ── Colonne groupe ── */
+        .col-party {
+            width: 240px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            padding: 20px 16px;
+            gap: 10px;
+            overflow-y: auto;
+        }
+        .party-title {
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #c9a96e;
+            margin-bottom: 2px;
+        }
+
+        /* Carte personnage — surligné quand actif */
+        .char-card {
+            background: #17151f;
+            border: 0.5px solid #2a2830;
+            border-radius: 8px;
+            padding: 10px 12px;
+            cursor: pointer;
+            transition: border-color 0.15s;
+            position: relative;
+        }
+        .char-card:hover             { border-color: #4a4260; }
+        /* Carte du personnage actif — bordure or + fond légèrement chaud */
+        .char-card.active-card       {
+            border-color: #c9a96e;
+            background: #1e1a10;
+        }
+        /* Badge "ACTIF" en haut à droite de la carte */
+        .active-badge {
+            display: none;
+            position: absolute;
+            top: 6px;
+            right: 8px;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            color: #c9a96e;
+            text-transform: uppercase;
+        }
+        .char-card.active-card .active-badge { display: block; }
+
+        .char-name {
+            font-size: 13px; font-weight: 500; color: #e8e6e0;
+            margin-bottom: 2px; white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis;
+            padding-right: 36px;   /* Espace pour le badge ACTIF */
+        }
+        .char-sub {
+            font-size: 11px; color: #5a5860; margin-bottom: 8px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .char-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .stat-block { display: flex; flex-direction: column; gap: 2px; }
+        .stat-label { font-size: 10px; color: #3e3c44; letter-spacing: 0.06em; }
+
+        .hp-row { display: flex; align-items: center; gap: 4px; }
+        .hp-input {
+            width: 36px; background: #0f0f13; border: 0.5px solid #2a2830;
+            border-radius: 4px; color: #e8e6e0; font-size: 13px;
+            font-weight: 500; text-align: center; padding: 2px 4px; outline: none;
+        }
+        .hp-input:focus  { border-color: #c9a96e; }
+        .hp-input.hp-high   { color: #6aad6a; }
+        .hp-input.hp-medium { color: #c9a96e; }
+        .hp-input.hp-low    { color: #c95a5a; }
+        .hp-max { font-size: 11px; color: #3e3c44; }
+        .stat-value { font-size: 13px; font-weight: 500; color: #ffffff; }
+
+        .ability-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 6px; }
+        .ability-cell { background: #0f0f13; border-radius: 4px; padding: 3px 2px; text-align: center; }
+        .ability-name  { font-size: 9px;  color: #3e3c44; display: block; }
+        .ability-score { font-size: 12px; color: #ffffff; font-weight: 500; display: block; }
+        .ability-mod   { font-size: 9px;  color: #5a5860; display: block; }
+
+        .party-empty { font-size: 12px; color: #3e3c44; font-style: italic; line-height: 1.6; }
+
+        /* Hint "Cliquez pour activer" */
+        .party-hint { font-size: 10px; color: #2a2830; text-align: center; margin-top: 4px; }
+
+        /* ── Statusbar ── */
+        .statusbar {
+            padding: 7px 32px;
+            border-top: 0.5px solid #1a1820;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .stat      { font-size: 11px; color: #3e3c44; }
+        .stat span { color: #5a5860; }
+        .btn-reset {
+            margin-left: auto; font-size: 11px; color: #5a3a3a;
+            background: none; border: none; cursor: pointer; padding: 2px 4px;
+        }
+        .btn-reset:hover { color: #a05050; }
+        .health-link { font-size: 11px; color: #3e3c44; text-decoration: none; margin-left: 4px; }
+        .health-link:hover { color: #5a5860; }
+
+        /* ── Panneau sorts ── */
+        .spells-section { margin-top: 12px; }
+        .spells-title {
+            font-size: 10px; font-weight: 500; letter-spacing: 0.08em;
+            text-transform: uppercase; color: #6b8cba; margin-bottom: 6px;
+        }
+        .caster-block { margin-bottom: 10px; }
+        .caster-name { font-size: 11px; color: #8facd4; margin-bottom: 4px; }
+        .slot-row {
+            display: flex; align-items: center; gap: 4px;
+            margin-bottom: 3px;
+        }
+        .slot-level-label { font-size: 10px; color: #3e3c44; width: 28px; flex-shrink: 0; }
+        .slot-pips { display: flex; gap: 3px; }
+        .slot-pip {
+            width: 12px; height: 12px; border-radius: 50%;
+            border: 0.5px solid #2a2830;
+            background: #17151f;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+            flex-shrink: 0;
+        }
+        .slot-pip.available { background: #6b8cba; border-color: #6b8cba; }
+        .slot-pip.used      { background: #1e1c24; border-color: #1a1820; }
+        .slot-pip:hover     { border-color: #c9a96e; }
+        .rest-buttons { display: flex; gap: 6px; margin-top: 10px; }
+        .btn-rest {
+            flex: 1; background: transparent; border: 0.5px solid #2a2830;
+            color: #5a5860; border-radius: 6px; padding: 4px 6px;
+            font-size: 10px; cursor: pointer; text-align: center;
+        }
+        .btn-rest:hover { border-color: #6b8cba; color: #6b8cba; }
+    </style>
+</head>
+<body>
+
+<!-- ── Topbar ── -->
+<div class="topbar">
+    <div class="logo">⚔ Dungeon Master</div>
+    <div class="topbar-meta">
+        {% if party and active_idx is not none %}
+            <span class="active-indicator">
+                ⚔ {{ party[active_idx].name or party[active_idx].nom or 'Personnage ' ~ (active_idx+1) }}
+            </span>
+        {% endif %}
+        <span>{{ ollama_model }}</span>
+        <span>session {{ session_id }}</span>
+    </div>
+</div>
+
+<!-- ── Layout ── -->
+<div class="main">
+
+    <!-- ── Colonne chat ── -->
+    <div class="col-chat">
+        <div class="chat" id="chat-history">
+            {% if history %}
+                {% for msg in history %}
+                    {% if not loop.first %}<div class="divider"></div>{% endif %}
+                    <div class="msg {{ 'player' if msg.role == 'user' else 'dm' }} {{ 'dm-msg' if msg.role == 'assistant' else '' }}"
+                         {{ 'data-tts-auto="1"' | safe if (loop.last and msg.role == 'assistant') else '' }}>
+                        <div class="msg-role">{{ 'Joueur' if msg.role == 'user' else 'Dungeon Master' }}</div>
+                        <div class="msg-text">{{ msg.content | replace('\n', '<br>') | safe }}</div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p class="empty-state">Commencez l'aventure — fournissez vos personnages en JSON ou tapez une action.</p>
+            {% endif %}
+        </div>
+
+        <div class="input-section">
+
+            <!-- Barre de contrôles : sélecteur de personnage + dés -->
+            <div class="controls-bar">
+
+                {% if party %}
+                    <!-- Sélecteur de personnage actif -->
+                    <span class="char-selector-label">Tour :</span>
+                    {% for char in party %}
+                        <button
+                            class="btn-char {{ 'active' if loop.index0 == active_idx else '' }}"
+                            id="char-btn-{{ loop.index0 }}"
+                            onclick="selectChar({{ loop.index0 }}, '{{ (char.name or char.nom or 'Personnage ' ~ loop.index) | e }}')"
+                        >{{ char.name or char.nom or 'Perso ' ~ loop.index }}</button>
+                    {% endfor %}
+                    <div class="bar-sep"></div>
+                {% endif %}
+
+                <!-- Dés -->
+                <span class="dice-label">🎲</span>
+                <button class="btn-die" onclick="rollDie(4)">d4</button>
+                <button class="btn-die" onclick="rollDie(6)">d6</button>
+                <button class="btn-die" onclick="rollDie(8)">d8</button>
+                <button class="btn-die" onclick="rollDie(10)">d10</button>
+                <button class="btn-die" onclick="rollDie(12)">d12</button>
+                <button class="btn-die" onclick="rollDie(20)">d20</button>
+                <button class="btn-die" onclick="rollDie(100)">d100</button>
+                <span class="dice-result" id="dice-result"></span>
+            </div>
+
+            <!-- Formulaire -->
+            <div class="input-area">
+                <form action="/send" method="post" style="display:contents">
+                    <textarea id="msg-input" name="user_input" rows="3"
+                        placeholder="{% if party and active_idx is not none %}{{ (party[active_idx].name or party[active_idx].nom or 'Personnage') | e }} : votre action…{% else %}Votre action, dialogue, jet de dés…{% endif %}"
+                        required></textarea>
+                    <div class="btn-col">
+                        <button type="submit" class="btn-send">⚔ Envoyer</button>
+                        <button type="button" class="btn-tts" id="tts-btn">🎤 Voix</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Colonne groupe ── -->
+    <div class="col-party">
+        <div class="party-title">Groupe</div>
+
+        {% if party %}
+            {% for char in party %}
+            <div class="char-card {{ 'active-card' if loop.index0 == active_idx else '' }}"
+                 id="card-{{ loop.index0 }}"
+                 data-index="{{ loop.index0 }}"
+                 onclick="selectChar({{ loop.index0 }}, '{{ (char.name or char.nom or 'Personnage ' ~ loop.index) | e }}')">
+
+                <span class="active-badge">actif</span>
+
+                <div class="char-name">
+                    {{ char.name or char.nom or ('Personnage ' ~ loop.index) }}
+                </div>
+                <div class="char-sub">
+                    {{ char.race or '?' }}
+                    {{ char.class or char.classe or '?' }}
+                    niv.{{ char.level or char.niveau or '?' }}
+                </div>
+
+                <div class="char-stats">
+                    <div class="stat-block">
+                        <span class="stat-label">HP</span>
+                        <div class="hp-row">
+                            <input type="number" class="hp-input"
+                                value="{{ char.HP or char.hp or char.hit_points or 0 }}"
+                                min="0"
+                                max="{{ char.HP_max or char.hp_max or char.HP or char.hp or 99 }}"
+                                data-max="{{ char.HP_max or char.hp_max or char.HP or char.hp or 99 }}"
+                                data-index="{{ loop.index0 }}"
+                                onchange="updateHP(this)"
+                                onclick="event.stopPropagation()"
+                                title="Modifier les HP">
+                            <span class="hp-max">/ {{ char.HP_max or char.hp_max or char.HP or char.hp or '?' }}</span>
+                        </div>
+                    </div>
+                    <div class="stat-block">
+                        <span class="stat-label">CA</span>
+                        <span class="stat-value">{{ char.AC or char.ac or char.armor_class or '?' }}</span>
+                    </div>
+                </div>
+
+                {% set STR = char.STR or char.str or char.FOR or char.force %}
+                {% set DEX = char.DEX or char.dex %}
+                {% set CON = char.CON or char.con %}
+                {% set INT = char.INT or char.intelligence %}
+                {% set WIS = char.WIS or char.wis or char.SAG %}
+                {% set CHA = char.CHA or char.cha %}
+                {% if STR or DEX or CON or INT or WIS or CHA %}
+                <div class="ability-grid">
+                    {% for label, score in [('FOR', STR), ('DEX', DEX), ('CON', CON), ('INT', INT), ('SAG', WIS), ('CHA', CHA)] %}
+                        {% if score %}
+                        <div class="ability-cell">
+                            <span class="ability-name">{{ label }}</span>
+                            <span class="ability-score">{{ score }}</span>
+                            <span class="ability-mod">
+                                {% set mod = ((score | int) - 10) // 2 %}
+                                {{ '+' if mod >= 0 else '' }}{{ mod }}
+                            </span>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+
+            <p class="party-hint">Cliquez sur une carte pour activer ce personnage</p>
+
+            <!-- Panneau emplacements de sorts — P2c -->
+            {% if spell_slots %}
+            <div class="spells-section">
+                <div class="spells-title">✦ Sorts</div>
+                {% for caster in spell_slots %}
+                <div class="caster-block">
+                    <div class="caster-name">{{ caster.name }}</div>
+                    {% for sl in caster.levels %}
+                    <div class="slot-row">
+                        <span class="slot-level-label">Niv{{ sl.level }}</span>
+                        <div class="slot-pips" data-char="{{ caster.name }}" data-level="{{ sl.level }}">
+                            {% for i in range(sl.max) %}
+                                <div class="slot-pip {{ 'available' if i < sl.available else 'used' }}"
+                                     data-pip="{{ i }}"
+                                     onclick="toggleSlot('{{ caster.name }}', {{ sl.level }}, {{ i }}, {{ sl.used }}, {{ sl.max }})"
+                                     title="Niv{{ sl.level }} — {{ sl.available }}/{{ sl.max }} disponibles">
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Boutons de repos rapide -->
+            {% if party %}
+            <div class="rest-buttons">
+                <button class="btn-rest" onclick="sendRest('!rest')">⛺ Repos court</button>
+                <button class="btn-rest" onclick="sendRest('!longrest')">🌙 Repos long</button>
+            </div>
+            {% endif %}
+
+        {% else %}
+            <p class="party-empty">
+                Aucun groupe chargé.<br><br>
+                Envoyez le JSON de vos personnages pour démarrer.
+            </p>
+        {% endif %}
+    </div>
+
+</div>
+
+<!-- ── Statusbar ── -->
+<div class="statusbar">
+    <div class="stat">v{{ code_version }}</div>
+    <div class="stat">msgs <span>{{ history | length }}</span></div>
+    <div class="stat">chars <span>{{ total_chars }}</span></div>
+    <form action="/reset" method="post" style="margin-left:auto">
+        <button type="submit" class="btn-reset">↺ reset</button>
+    </form>
+    <a href="/health" class="health-link">health</a>
+</div>
+
+<script>
+    // ── État JS local ──────────────────────────────────────────────────────────
+    // active_idx est injecté par Jinja2 — synchronisé avec le serveur au chargement.
+    let activeIdx = {{ active_idx if active_idx is not none else 'null' }};
+
+    // Noms des personnages pour le préfixage automatique du textarea
+    const charNames = [
+        {% if party %}
+            {% for char in party %}
+                "{{ (char.name or char.nom or 'Personnage ' ~ loop.index) | e }}"{% if not loop.last %},{% endif %}
+            {% endfor %}
+        {% endif %}
+    ];
+
+    // ── Auto-scroll — positionne sur le début du dernier message ─────────────
+    // On cherche le dernier .msg dans le chat et on scrolle jusqu'à lui,
+    // de sorte que son début soit visible en haut de la zone de chat.
+    // scrollIntoView({ block: 'start' }) garantit que le haut du message
+    // est aligné avec le haut de la zone scrollable, pas coupé.
+    const chat = document.getElementById('chat-history');
+    const allMsgs = chat.querySelectorAll('.msg');
+    if (allMsgs.length) {
+        allMsgs[allMsgs.length - 1].scrollIntoView({ block: 'start', behavior: 'instant' });
+    } else {
+        chat.scrollTop = 0;
+    }
+
+    // ── Préfixage du textarea avec le nom du personnage actif ─────────────────
+    function prefixTextarea(name) {
+        const ta      = document.getElementById('msg-input');
+        const prefix  = name + ' : ';
+        // Si le textarea est vide ou contient déjà un préfixe de personnage,
+        // le remplacer. Sinon ajouter devant le texte existant.
+        const existing = ta.value;
+        const prefixMatch = existing.match(/^([^:]+) : /);
+        if (!existing || prefixMatch) {
+            ta.value = prefix;
+        } else {
+            ta.value = prefix + existing;
+        }
+        ta.focus();
+        ta.setSelectionRange(ta.value.length, ta.value.length);
+    }
+
+    // ── Sélection d'un personnage actif ───────────────────────────────────────
+    // Appelé soit par un clic sur btn-char, soit par un clic sur une char-card.
+    function selectChar(idx, name) {
+        if (idx === activeIdx) return;   // Déjà actif — rien à faire
+
+        // Mise à jour visuelle immédiate (sans attendre la réponse serveur)
+        updateActiveUI(idx);
+
+        // Persistance côté serveur via AJAX
+        fetch('/party/active', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ index: idx }),
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.ok) {
+                console.warn('Erreur set active character');
+            }
+        })
+        .catch(e => console.error('Set active error:', e));
+
+        // Préfixe le textarea avec le nom du nouveau personnage actif
+        prefixTextarea(name);
+    }
+
+    // ── Mise à jour de l'UI après changement de personnage actif ─────────────
+    function updateActiveUI(idx) {
+        activeIdx = idx;
+
+        // Boutons de la barre de sélection
+        document.querySelectorAll('.btn-char').forEach((btn, i) => {
+            btn.classList.toggle('active', i === idx);
+        });
+
+        // Cartes du panneau groupe
+        document.querySelectorAll('.char-card').forEach((card, i) => {
+            card.classList.toggle('active-card', i === idx);
+        });
+
+        // Placeholder du textarea
+        const ta = document.getElementById('msg-input');
+        if (charNames[idx]) {
+            ta.placeholder = charNames[idx] + ' : votre action…';
+        }
+    }
+
+    // ── Préfixage initial au chargement de la page ────────────────────────────
+    // Si un personnage est actif et le textarea est vide, préfixer automatiquement.
+    if (activeIdx !== null && charNames[activeIdx]) {
+        const ta = document.getElementById('msg-input');
+        if (!ta.value) {
+            ta.value = charNames[activeIdx] + ' : ';
+        }
+    }
+
+    // ── Lanceur de dés ─────────────────────────────────────────────────────────
+    function rollDie(faces) {
+        const result   = Math.floor(Math.random() * faces) + 1;
+        const label    = `[d${faces}: ${result}]`;
+        const ta       = document.getElementById('msg-input');
+        const sep      = ta.value.trim() ? ' ' : '';
+        ta.value      += sep + label;
+        ta.focus();
+        ta.setSelectionRange(ta.value.length, ta.value.length);
+
+        const resultEl = document.getElementById('dice-result');
+        resultEl.textContent = label;
+        resultEl.classList.add('visible');
+        clearTimeout(window._diceTimeout);
+        window._diceTimeout = setTimeout(() => resultEl.classList.remove('visible'), 3000);
+    }
+
+    // ── Mise à jour HP (AJAX) ──────────────────────────────────────────────────
+    function updateHP(input) {
+        const idx  = parseInt(input.dataset.index);
+        const hp   = parseInt(input.value);
+        const max  = parseInt(input.dataset.max);
+
+        input.classList.remove('hp-high', 'hp-medium', 'hp-low');
+        const ratio = max > 0 ? hp / max : 1;
+        if      (ratio > 0.5)  input.classList.add('hp-high');
+        else if (ratio > 0.25) input.classList.add('hp-medium');
+        else                   input.classList.add('hp-low');
+
+        fetch('/party/hp', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ index: idx, hp: hp }),
+        }).catch(e => console.error('HP update error:', e));
+    }
+
+    // Couleurs HP initiales au chargement
+    document.querySelectorAll('.hp-input').forEach(input => {
+        if (input.value) updateHP(input);
+    });
+
+    // ── TTS — lecture automatique + segmentée ────────────────────────────────
+    //
+    // Amélioration 1 : le texte reçu est déjà nettoyé du Markdown côté serveur.
+    // Amélioration 3 : le texte est découpé en segments sur les frontières de
+    //   phrases (. ! ?) pour ne jamais couper une phrase en deux.
+    //   Chaque segment est envoyé séparément à /tts et les WAV sont joués
+    //   en séquence — le suivant démarre dès que le précédent se termine.
+    //
+    // Déclenchement : automatique dès que la page charge avec un nouveau
+    //   message DM (détecté via un flag data-tts-pending sur le dernier .dm-msg).
+    //   Le bouton 🎤 Voix reste disponible pour relire manuellement.
+
+    const TTS_SEGMENT_MAX = 550;  // Caractères max par segment (marge sous 600)
+
+    /**
+     * Découpe un texte en segments ne dépassant pas maxLen caractères,
+     * en coupant uniquement sur les fins de phrases (. ! ? : ;) ou à défaut
+     * sur les espaces. Évite de couper les abréviations courantes (M. Mme. etc).
+     */
+    function splitIntoSegments(text, maxLen) {
+        const segments = [];
+        let remaining  = text.trim();
+
+        while (remaining.length > maxLen) {
+            // Cherche la dernière fin de phrase dans la fenêtre maxLen
+            const window = remaining.slice(0, maxLen);
+            // Regex : fin de phrase suivie d'un espace ou fin de chaîne
+            const match  = window.match(/^(.*[.!?])\s+\S/s);
+            let cutAt;
+            if (match) {
+                cutAt = match[1].length;
+            } else {
+                // Pas de fin de phrase — coupe sur le dernier espace
+                const lastSpace = window.lastIndexOf(' ');
+                cutAt = lastSpace > 0 ? lastSpace : maxLen;
+            }
+            segments.push(remaining.slice(0, cutAt).trim());
+            remaining = remaining.slice(cutAt).trim();
+        }
+        if (remaining) segments.push(remaining);
+        return segments.filter(s => s.length > 0);
+    }
+
+    /** Joue une liste de segments audio en séquence via /tts. */
+    async function playSegments(segments, btn) {
+        for (let i = 0; i < segments.length; i++) {
+            const seg = segments[i];
+            // Indicateur de progression dans le bouton
+            if (btn) {
+                btn.textContent = segments.length > 1
+                    ? `⏸ ${i + 1}/${segments.length}…`
+                    : '⏸ Lecture…';
+            }
+            await new Promise((resolve, reject) => {
+                const audio = new Audio('/tts?text=' + encodeURIComponent(seg));
+                audio.onended = resolve;
+                audio.onerror = reject;
+                audio.play().catch(reject);
+            });
+        }
+    }
+
+    /** Point d'entrée TTS : extrait le texte du dernier message DM et le lit. */
+    async function readLastDmMessage(btn) {
+        const dmBlocks = chat.querySelectorAll('.dm-msg .msg-text');
+        if (!dmBlocks.length) return;
+        // innerText respecte les <br> comme sauts de ligne
+        const rawText  = dmBlocks[dmBlocks.length - 1].innerText.trim();
+        if (!rawText) return;
+
+        const segments = splitIntoSegments(rawText, TTS_SEGMENT_MAX);
+        if (!segments.length) return;
+
+        if (btn) {
+            btn.classList.add('playing');
+            btn.textContent = '⏸ Lecture…';
+        }
+        try {
+            await playSegments(segments, btn);
+        } catch(e) {
+            console.error('TTS erreur:', e);
+        } finally {
+            if (btn) {
+                btn.classList.remove('playing');
+                btn.textContent = '🎤 Voix';
+            }
+        }
+    }
+
+    // Bouton manuel — relecture à la demande
+    document.getElementById('tts-btn').onclick = function() {
+        readLastDmMessage(this);
+    };
+
+    // Lecture automatique si la page vient d'être rechargée après un message DM
+    // Le dernier message DM reçoit l'attribut data-tts-auto="1" via Jinja2
+    // (voir template) pour signaler qu'il doit être lu automatiquement.
+    const autoTarget = chat.querySelector('.dm-msg[data-tts-auto="1"]');
+    if (autoTarget) {
+        // Petit délai pour laisser le navigateur finir le rendu
+        setTimeout(() => readLastDmMessage(document.getElementById('tts-btn')), 400);
+    }
+
+    // ── Spell slot toggle — P2c ───────────────────────────────────────────────
+    // Bascule un emplacement entre utilisé et disponible.
+    // Le pip cliqué détermine le delta : si pip < used → récupère 1, sinon utilise 1
+    function toggleSlot(charName, slotLevel, pipIndex, currentUsed, maxSlots) {
+        // Si on clique sur un pip déjà "used" → on récupère (delta = -1)
+        // Si on clique sur un pip "available" → on utilise (delta = +1)
+        const delta = pipIndex < currentUsed ? -1 : 1;
+
+        fetch('/spells/use', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ char_name: charName, slot_level: slotLevel, delta: delta }),
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.ok) {
+                // Mise à jour visuelle des pips sans rechargement
+                const row = document.querySelector(
+                    `.slot-pips[data-char="${charName}"][data-level="${slotLevel}"]`
+                );
+                if (row) {
+                    const pips = row.querySelectorAll('.slot-pip');
+                    pips.forEach((pip, i) => {
+                        pip.classList.toggle('available', i < data.available);
+                        pip.classList.toggle('used',      i >= data.available);
+                        // Met à jour le data-pip et onclick avec les nouvelles valeurs
+                        pip.setAttribute('onclick',
+                            `toggleSlot('${charName}', ${slotLevel}, ${i}, ${data.used}, ${maxSlots})`
+                        );
+                    });
+                }
+            }
+        })
+        .catch(e => console.error('Slot toggle error:', e));
+    }
+
+    // ── Boutons de repos — P2b ────────────────────────────────────────────────
+    // Injecte la commande de repos dans le textarea et soumet le formulaire.
+    function sendRest(command) {
+        const ta   = document.getElementById('msg-input');
+        const form = ta.closest('form');
+        ta.value   = command;
+        form.submit();
+    }
+
+</script>
+</body>
+</html>
