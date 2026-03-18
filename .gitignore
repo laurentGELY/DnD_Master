@@ -7,3 +7,4 @@ voices/
 Modelfile.txt
 dnd_app_architecture.svg
 memo_venv.txt
+.venv/
