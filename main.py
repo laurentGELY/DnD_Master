@@ -2,8 +2,16 @@
 """
 D&D 5e AI Dungeon Master Web App
 ================================
-Version: 1.3.0 (2026-03-13)
+Version: 1.4.0 (2026-03-18)
 Licence: MIT (usage personnel)
+
+NOUVEAUTÉS v1.4.0
+-----------------
+- Sélection de voix Piper dans l'interface (menu déroulant)
+- Endpoint GET /voices → liste tous les modèles .onnx disponibles dans voices/
+- Endpoint GET /tts accepte maintenant un paramètre optionnel voice= (défaut : fr_FR-gilles-low.onnx)
+- Choix de voix persisté dans le localStorage du navigateur
+- Ajout d'une nouvelle voix : poser le .onnx dans voices/ suffit, sans redémarrage
 
 NOUVEAUTÉS v1.3.0
 -----------------
@@ -17,7 +25,7 @@ NOUVEAUTÉS v1.3.0
 
 LANCEMENT
 ---------
-cd "/home/laurentg/Downloads/Sandbox/DnD/Py/dnd-dm-app"
+cd dnd-dm-app
 source ../.venv/bin/activate
 uvicorn main:app --reload --host 127.0.0.1 --port 8000
 """
@@ -42,7 +50,7 @@ from fastapi.templating import Jinja2Templates
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
-CODE_VERSION = "1.5.0"
+CODE_VERSION = "1.6.0"
 
 OLLAMA_URL   = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "dnd-dm-8b")
@@ -51,9 +59,10 @@ BASE_DIR           = Path(__file__).parent
 SYSTEM_PROMPT_PATH = BASE_DIR / "prompts" / "system_prompt.txt"
 TEMPLATES_DIR      = BASE_DIR / "templates"
 
-PIPER_BIN        = BASE_DIR / "bin" / "piper"
-PIPER_MODEL_PATH = BASE_DIR / "voices" / "fr_FR-gilles-low.onnx"
-PIPER_LIBS_DIR   = BASE_DIR / "bin" / "piper_amd64"
+PIPER_BIN      = BASE_DIR / "bin" / "piper"
+PIPER_LIBS_DIR = BASE_DIR / "bin" / "piper_amd64"
+VOICES_DIR     = BASE_DIR / "voices"
+DEFAULT_VOICE  = "fr_FR-gilles-low.onnx"
 
 # Chemins vers les fichiers de données SRD
 MONSTERS_PATH = BASE_DIR / "data" / "monsters.json"
@@ -619,13 +628,24 @@ async def call_ollama(messages: List[Dict[str, str]]) -> tuple[str, int, int]:
 # PIPER TTS
 # ═══════════════════════════════════════════════════════════════════════════════
 
+@app.get("/voices")
+def list_voices():
+    """GET /voices — liste les modèles Piper disponibles dans voices/."""
+    models = sorted(p.name for p in VOICES_DIR.glob("*.onnx"))
+    return {"voices": models, "default": DEFAULT_VOICE}
+
+
 @app.get("/tts")
-async def tts_piper(text: str):
-    """GET /tts?text=... — synthèse vocale FR avec piper bundlé."""
+async def tts_piper(text: str, voice: str = DEFAULT_VOICE):
+    """GET /tts?text=...&voice=... — synthèse vocale FR avec piper bundlé."""
+    # Sécurité : le modèle doit être un fichier .onnx situé dans VOICES_DIR
+    model_path = (VOICES_DIR / voice).resolve()
+    if model_path.parent != VOICES_DIR.resolve() or model_path.suffix != ".onnx":
+        return HTMLResponse("Voix invalide", status_code=400)
     if not PIPER_BIN.exists():
         return HTMLResponse(f"Piper introuvable: {PIPER_BIN}", status_code=500)
-    if not PIPER_MODEL_PATH.exists():
-        return HTMLResponse(f"Modèle introuvable: {PIPER_MODEL_PATH}", status_code=500)
+    if not model_path.exists():
+        return HTMLResponse(f"Modèle introuvable: {model_path}", status_code=500)
 
     # Pas de limite de longueur côté serveur — le découpage en segments
     # est géré côté JS avant l'appel. Chaque segment reçu ici est déjà court.
@@ -639,7 +659,7 @@ async def tts_piper(text: str):
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             tmp_path = tmp.name
         proc = subprocess.run(
-            [str(PIPER_BIN), "--model", str(PIPER_MODEL_PATH), "--output_file", tmp_path],
+            [str(PIPER_BIN), "--model", str(model_path), "--output_file", tmp_path],
             input=text_clean.encode("utf-8"),
             capture_output=True, timeout=30, env=piper_env,
         )
@@ -898,7 +918,8 @@ async def health_check():
         "ollama_model":     OLLAMA_MODEL,
         "ollama_status":    ollama_status,
         "piper_bin_ok":     PIPER_BIN.exists(),
-        "piper_model_ok":   PIPER_MODEL_PATH.exists(),
+        "piper_model_ok":   (VOICES_DIR / DEFAULT_VOICE).exists(),
+        "voices_available": sorted(p.name for p in VOICES_DIR.glob("*.onnx")),
         "active_sessions":  len(CONVERSATIONS),
         "active_parties":   len(PARTY_STATES),
         "monsters_loaded":  len(MONSTERS_DB),

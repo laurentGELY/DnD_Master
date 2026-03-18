@@ -189,6 +189,15 @@
         }
         .btn-tts:hover   { border-color: #4a4260; color: #c9a96e; }
         .btn-tts.playing { color: #c9a96e; border-color: #c9a96e; }
+        .voice-select {
+            background: transparent; border: 0.5px solid #2a2830;
+            color: #8a8690; border-radius: 8px; padding: 0 8px;
+            font-size: 12px; cursor: pointer; flex: 1;
+            appearance: none; -webkit-appearance: none;
+            text-align: center;
+        }
+        .voice-select:hover  { border-color: #4a4260; color: #c9a96e; }
+        .voice-select:focus  { outline: none; border-color: #4a4260; }
 
         /* ── Colonne groupe ── */
         .col-party {
@@ -404,6 +413,7 @@
                         required></textarea>
                     <div class="btn-col">
                         <button type="submit" class="btn-send">⚔ Envoyer</button>
+                        <select class="voice-select" id="voice-select" title="Choisir la voix"></select>
                         <button type="button" class="btn-tts" id="tts-btn">🎤 Voix</button>
                     </div>
                 </form>
@@ -678,6 +688,29 @@
         if (input.value) updateHP(input);
     });
 
+    // ── Sélecteur de voix — peuplé depuis /voices ────────────────────────────
+    (async function initVoiceSelect() {
+        const sel = document.getElementById('voice-select');
+        try {
+            const { voices, default: def } = await fetch('/voices').then(r => r.json());
+            const saved = localStorage.getItem('tts-voice') || def;
+            voices.forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = v;
+                opt.text  = v.replace(/^[a-z]{2}_[A-Z]{2}-/, '').replace(/\.onnx$/, '');
+                opt.selected = (v === saved);
+                sel.appendChild(opt);
+            });
+        } catch(e) {
+            // Fallback silencieux si /voices échoue
+            const opt = document.createElement('option');
+            opt.value = 'fr_FR-gilles-low.onnx';
+            opt.text  = 'gilles-low';
+            sel.appendChild(opt);
+        }
+        sel.onchange = () => localStorage.setItem('tts-voice', sel.value);
+    })();
+
     // ── TTS — lecture automatique + segmentée ────────────────────────────────
     //
     // Amélioration 1 : le texte reçu est déjà nettoyé du Markdown côté serveur.
@@ -732,7 +765,10 @@
                     : '⏸ Lecture…';
             }
             await new Promise((resolve, reject) => {
-                const audio = new Audio('/tts?text=' + encodeURIComponent(seg));
+                const voice = document.getElementById('voice-select').value;
+                const url   = '/tts?text=' + encodeURIComponent(seg)
+                            + '&voice='    + encodeURIComponent(voice);
+                const audio = new Audio(url);
                 audio.onended = resolve;
                 audio.onerror = reject;
                 audio.play().catch(reject);

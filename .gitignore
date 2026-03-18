@@ -2,3 +2,8 @@ __pycache__/
 *.pyc
 .env
 venv/
+bin/
+voices/
+Modelfile.txt
+dnd_app_architecture.svg
+memo_venv.txt

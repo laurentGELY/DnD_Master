@@ -7,7 +7,7 @@ Application web locale pour jouer à Donjons & Dragons 5e avec un Maître du Don
 ## Fonctionnalités
 
 - **IA Dungeon Master** : Llama 3.1 8B via Ollama, guidé par un system prompt D&D 5e complet
-- **Synthèse vocale** : voix française naturelle via Piper TTS (modèle fr_FR-gilles-low)
+- **Synthèse vocale** : voix française naturelle via Piper TTS, voix sélectionnable dans l'interface (défaut : fr_FR-gilles-low)
 - **Interface sobre** : thème sombre, design minimaliste, entièrement dans le navigateur
 - **Sessions en RAM** : pas de base de données, zéro configuration
 - **Prompt versionnable** : le comportement du DM se modifie en éditant un simple fichier texte, sans redémarrer le serveur
@@ -22,7 +22,8 @@ Browser (Firefox/Chromium)
     │  GET /          → affiche la page (Jinja2 + HTML)
     │  POST /send     → envoie un message, reçoit la réponse du DM
     │  POST /reset    → efface la session courante
-    │  GET /tts?text= → reçoit le fichier WAV de la voix
+    │  GET /tts?text=&voice= → reçoit le fichier WAV de la voix
+    │  GET /voices    → liste les modèles .onnx disponibles
     │  GET /health    → diagnostic JSON
     ▼
 FastAPI (main.py) — écoute sur 127.0.0.1:8000
@@ -36,7 +37,7 @@ FastAPI (main.py) — écoute sur 127.0.0.1:8000
     │
     └── Piper TTS ──► bin/piper (binaire AMD64 bundlé)
             Libs  : bin/piper_amd64/ (onnxruntime, phonemize, espeak-ng)
-            Voix  : voices/fr_FR-gilles-low.onnx
+            Voix  : voices/*.onnx (sélectionnable dans l'UI, défaut : fr_FR-gilles-low)
 ```
 
 ### Pattern PRG (Post/Redirect/Get)
@@ -75,8 +76,16 @@ dnd-dm-app/
 │       └── espeak-ng-data/          # Données phonétiques
 │
 └── voices/
-    ├── fr_FR-gilles-low.onnx        # Modèle vocal (voix masculine FR)
-    └── fr_FR-gilles-low.onnx.json   # Métadonnées du modèle
+    ├── fr_FR-gilles-low.onnx        # Voix par défaut (masculine, qualité low)
+    ├── fr_FR-gilles-low.onnx.json
+    ├── fr_FR-siwis-medium.onnx      # Voix féminine, qualité medium
+    ├── fr_FR-siwis-medium.onnx.json
+    ├── fr_FR-tom-medium.onnx        # Voix masculine, qualité medium
+    ├── fr_FR-tom-medium.onnx.json
+    ├── fr_FR-mls-medium.onnx
+    ├── fr_FR-mls-medium.onnx.json
+    ├── fr_FR-upmc-medium.onnx
+    └── fr_FR-upmc-medium.onnx.json  # Tout fichier .onnx ajouté ici est détecté automatiquement
 ```
 
 ---
@@ -94,22 +103,22 @@ dnd-dm-app/
 
 ## Installation
 
-### 1. Cloner / extraire le projet
+### 1. Cloner le projet
 
 ```bash
-cd "/home/laurentg/Downloads/Sandbox/DnD/Py"
-# Le dossier dnd-dm-app/ doit exister avec la structure ci-dessus
+git clone https://github.com/laurentGELY/DnD_Master.git
+cd dnd-dm-app
 ```
 
 ### 2. Créer et activer le virtualenv
 
 ```bash
-cd "/home/laurentg/Downloads/Sandbox/DnD/Py"
+# Depuis le dossier parent de dnd-dm-app/ (un cran au-dessus)
 python3 -m venv .venv
 source .venv/bin/activate
 ```
 
-> **Pourquoi un venv ?** Le dossier parent du projet (`Py/`) contient le `.venv` partagé entre potentiellement plusieurs projets. Le chemin d'activation depuis `dnd-dm-app/` est donc `../.venv/bin/activate`.
+> **Pourquoi un venv dans le dossier parent ?** Cette organisation permet de partager un même `.venv` entre plusieurs projets voisins. Le chemin d'activation depuis `dnd-dm-app/` est donc `../.venv/bin/activate`.
 
 ### 3. Installer les dépendances Python
 
@@ -145,7 +154,7 @@ bin/piper --model voices/fr_FR-gilles-low.onnx \
 ## Lancement
 
 ```bash
-cd "/home/laurentg/Downloads/Sandbox/DnD/Py/dnd-dm-app"
+cd dnd-dm-app
 source ../.venv/bin/activate
 uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
@@ -195,6 +204,9 @@ Vérifier l'état du système : **http://localhost:8000/health**
 Cliquer sur **🎤 Voix** après un message du DM pour l'entendre lu à voix haute.
 Le bouton affiche **⏸ Lecture…** pendant la lecture, puis revient à son état initial.
 
+Le menu déroulant à gauche du bouton permet de choisir la voix parmi toutes celles disponibles dans `voices/`.
+Le choix est mémorisé dans le navigateur (localStorage) et persisté entre les sessions.
+
 ---
 
 ## Configuration avancée
@@ -211,14 +223,11 @@ Ou modifier directement la valeur par défaut dans `main.py` :
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mon-autre-modele")
 ```
 
-### Changer la voix Piper
+### Ajouter une voix Piper
 
 Télécharger un modèle depuis https://huggingface.co/rhasspy/piper-voices/tree/main,
-placer le `.onnx` et le `.onnx.json` dans `voices/`, puis modifier dans `main.py` :
-
-```python
-PIPER_MODEL_PATH = BASE_DIR / "voices" / "fr_FR-upmc-medium.onnx"
-```
+placer le `.onnx` et le `.onnx.json` dans `voices/`.
+La nouvelle voix apparaît automatiquement dans le menu déroulant de l'interface sans redémarrer le serveur.
 
 ### Modifier le comportement du DM
 
@@ -332,7 +341,7 @@ dans un dossier `sessions/` à chaque modification.
 |-----------|-----------|-------|
 | Persistance des sessions sur disque | Faible | JSON dans `sessions/{uuid}.json` |
 | Streaming de la réponse Ollama (SSE) | Moyenne | Remplacer le pattern PRG par WebSocket ou EventSource |
-| Plusieurs voix Piper sélectionnables | Faible | Ajouter un paramètre `voice=` à `/tts` |
+| ~~Plusieurs voix Piper sélectionnables~~ | ✅ Fait | Menu déroulant dans l'UI, `/voices` endpoint, `voice=` param sur `/tts` |
 | Export de la conversation en PDF | Moyenne | WeasyPrint ou pandoc |
 | Carte tactique simple (Theatre of the Mind) | Haute | Canvas HTML5 |
 
