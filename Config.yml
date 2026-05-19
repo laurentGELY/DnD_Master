@@ -1,0 +1,21 @@
+# D&D 5e AI Dungeon Master — Application Configuration
+# Env-var overrides: OLLAMA_URL, OLLAMA_MODEL
+
+app:
+  version: "1.8.0"
+
+ollama:
+  url:   "http://localhost:11434"
+  model: "dnd-dm-magistral"
+
+tts:
+  default_voice: "fr_FR-gilles-low.onnx"
+
+session:
+  max_history_turns:   50
+  max_user_input_len:  2000
+  ttl_seconds:         10800   # 3 heures
+
+context_compaction:
+  threshold:    80    # compacter quand l'historique dépasse N messages
+  keep_recent:  40    # conserver les N messages les plus récents verbatim

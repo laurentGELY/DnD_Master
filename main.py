@@ -2,8 +2,14 @@
 """
 D&D 5e AI Dungeon Master Web App
 ================================
-Version: 1.7.0 (2026-05-19)
+Version: see Config.yml → app.version
 Licence: MIT (usage personnel)
+
+NOUVEAUTÉS v1.8.0
+-----------------
+- Configuration externalisée dans Config.yml (plus de constantes codées en dur)
+- Env-vars OLLAMA_URL et OLLAMA_MODEL restent prioritaires sur Config.yml
+- pyyaml ajouté aux dépendances
 
 NOUVEAUTÉS v1.7.0
 -----------------
@@ -58,6 +64,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import yaml
+
 import httpx
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
@@ -67,21 +75,41 @@ from fastapi.templating import Jinja2Templates
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
-CODE_VERSION = "1.7.0"
-
-OLLAMA_URL   = os.getenv("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "dnd-dm-magistral")
-
 BASE_DIR           = Path(__file__).parent
 SYSTEM_PROMPT_PATH = BASE_DIR / "prompts" / "system_prompt.txt"
 TEMPLATES_DIR      = BASE_DIR / "templates"
 
+# ── Chargement de Config.yml ──────────────────────────────────────────────────
+_CONFIG_PATH = BASE_DIR / "Config.yml"
+
+def _load_config() -> dict:
+    if not _CONFIG_PATH.exists():
+        logging.warning(f"Config.yml introuvable ({_CONFIG_PATH}) — valeurs par défaut utilisées")
+        return {}
+    with open(_CONFIG_PATH, encoding="utf-8") as _f:
+        return yaml.safe_load(_f) or {}
+
+_CFG = _load_config()
+
+CODE_VERSION        = _CFG.get("app",               {}).get("version",          "0.0.0")
+
+OLLAMA_URL   = os.getenv("OLLAMA_URL",   _CFG.get("ollama", {}).get("url",   "http://localhost:11434"))
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", _CFG.get("ollama", {}).get("model", "dnd-dm-magistral"))
+
+DEFAULT_VOICE       = _CFG.get("tts",                {}).get("default_voice",      "fr_FR-gilles-low.onnx")
+
+MAX_HISTORY_TURNS   = _CFG.get("session",            {}).get("max_history_turns",  50)
+MAX_USER_INPUT_LEN  = _CFG.get("session",            {}).get("max_user_input_len", 2000)
+SESSION_TTL_SECONDS = _CFG.get("session",            {}).get("ttl_seconds",        10800)
+
+COMPACT_THRESHOLD   = _CFG.get("context_compaction", {}).get("threshold",          80)
+COMPACT_KEEP_RECENT = _CFG.get("context_compaction", {}).get("keep_recent",        40)
+
 PIPER_BIN      = BASE_DIR / "bin" / "piper"
 PIPER_LIBS_DIR = BASE_DIR / "bin" / "piper_amd64"
 VOICES_DIR     = BASE_DIR / "voices"
-DEFAULT_VOICE  = "fr_FR-gilles-low.onnx"
 
-# Piper environment — construit une seule fois au démarrage (Step 1)
+# Piper environment — construit une seule fois au démarrage
 PIPER_ENV: dict = {
     **os.environ,
     "LD_LIBRARY_PATH":  str(PIPER_LIBS_DIR),
@@ -91,13 +119,6 @@ PIPER_ENV: dict = {
 # Chemins vers les fichiers de données SRD
 MONSTERS_PATH = BASE_DIR / "data" / "monsters.json"
 SPELLS_PATH   = BASE_DIR / "data" / "spells.json"
-
-MAX_HISTORY_TURNS   = 50
-MAX_USER_INPUT_LEN  = 2000
-SESSION_TTL_SECONDS = 3 * 3600   # sessions inactives > 3h supprimées automatiquement
-
-COMPACT_THRESHOLD   = 80   # compacter quand l'historique dépasse 80 messages (40 tours)
-COMPACT_KEEP_RECENT = 40   # conserver les 40 messages les plus récents verbatim (20 tours)
 
 PARTY_REQUIRED_KEYS = {"name", "race", "class", "level", "HP", "AC",
                        "classe", "niveau", "hp", "ac", "hit_points"}

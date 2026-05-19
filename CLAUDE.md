@@ -27,15 +27,17 @@ bin/piper --model voices/fr_FR-gilles-low.onnx --output_file /tmp/test.wav <<< "
 
 Single-file FastAPI backend (`main.py`) — no database, no auth, no package structure.
 
-**In-RAM state** (lost on restart, session-keyed by UUID cookie):
-- `CONVERSATIONS` — chat history sent to Ollama
-- `PARTY_STATES` — character sheets parsed from player-submitted JSON
-- `ACTIVE_CHARACTER` — index of whose turn it is (round-robin)
-- `SPELL_SLOTS_USED` — tracking per caster per session
+**In-RAM state** (lost on restart, session-keyed by UUID cookie):  
+All session state is held in `SESSIONS: dict[str, Session]` where each `Session` dataclass contains:
+- `conversations` — chat history sent to Ollama
+- `party` — character sheets parsed from player-submitted JSON
+- `active_character` — index of whose turn it is (round-robin)
+- `spell_slots_used` — tracking per caster per session
+- `last_active` — monotonic timestamp used for TTL expiry
 
 **Request flow:** POST /send → process → `303 Redirect` → GET / (PRG pattern to prevent F5 resubmission)
 
-**System prompt** (`prompts/system_prompt.txt`) is re-read on every Ollama call — edit it and changes take effect immediately without restart.
+**System prompt** (`prompts/system_prompt.txt`) is cached by mtime — edit it and the next Ollama call picks up the change automatically (no restart needed).
 
 **Data files loaded at startup** (`data/monsters.json`, `data/spells.json`):
 - `MONSTERS_DB` — keyed by English name, each entry has `fr: [...]` aliases
@@ -46,7 +48,7 @@ Single-file FastAPI backend (`main.py`) — no database, no auth, no package str
 
 **Monster injection:** When the DM response contains a `[COMBAT: gobelin, loup géant]` tag, `detect_monsters_in_text()` extracts it, looks up official SRD stats, and injects them as a system message on the *next* Ollama call via `build_monsters_context()`. The tag is stripped from the text displayed to the player.
 
-**Message construction** (`build_messages()`): system messages are always prepended in this order — DM system prompt, party state + active character, spell slots, combat monster stats — followed by the sliding history window (`MAX_HISTORY_TURNS = 15` turns × 2 messages).
+**Message construction** (`build_messages()`): system messages are always prepended in this order — DM system prompt, party state + active character, spell slots, combat monster stats — followed by the sliding history window (`MAX_HISTORY_TURNS` turns × 2 messages, configured in `Config.yml`).
 
 **Markdown stripping** (`strip_markdown()`): applied to every Ollama reply before storage and display, so both the UI and Piper TTS receive clean text.
 
@@ -56,12 +58,20 @@ Single-file FastAPI backend (`main.py`) — no database, no auth, no package str
 
 ## Configuration
 
-| Variable | Default | Effect |
-|---|---|---|
-| `OLLAMA_URL` | `http://localhost:11434` | Ollama endpoint |
-| `OLLAMA_MODEL` | `dnd-dm-8b` | Model name |
+All tuneable parameters live in **`Config.yml`** (YAML, loaded at startup). Edit the file and restart — no code change needed.
 
-`MAX_HISTORY_TURNS` and `MAX_USER_INPUT_LEN` are constants in `main.py`.
+| `Config.yml` key | Default | Effect |
+|---|---|---|
+| `ollama.url` | `http://localhost:11434` | Ollama endpoint |
+| `ollama.model` | `dnd-dm-magistral` | Model name |
+| `tts.default_voice` | `fr_FR-gilles-low.onnx` | Piper voice |
+| `session.max_history_turns` | `50` | Sliding history window |
+| `session.max_user_input_len` | `2000` | Max chars per player message |
+| `session.ttl_seconds` | `10800` | Session expiry (3 h) |
+| `context_compaction.threshold` | `80` | Compact when history exceeds N messages |
+| `context_compaction.keep_recent` | `40` | Messages kept verbatim after compaction |
+
+`OLLAMA_URL` and `OLLAMA_MODEL` env-vars override the YAML values when set.
 
 ## Spell slot system
 
