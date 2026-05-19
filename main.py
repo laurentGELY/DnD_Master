@@ -66,6 +66,8 @@ from typing import Dict, List, Optional
 
 import yaml
 
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+
 import httpx
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
@@ -123,6 +125,44 @@ SPELLS_PATH   = BASE_DIR / "data" / "spells.json"
 PARTY_REQUIRED_KEYS = {"name", "race", "class", "level", "HP", "AC",
                        "classe", "niveau", "hp", "ac", "hit_points"}
 
+
+class Character(BaseModel):
+    """Schéma de validation d'un personnage joueur. Accepte les variantes FR et EN."""
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
+
+    name:  str           = Field("?",  validation_alias=AliasChoices("name", "nom"))
+    race:  str           = Field("?")
+    cls:   str           = Field("?",  validation_alias=AliasChoices("class", "classe"),
+                                       serialization_alias="class")
+    level: int           = Field(1,    validation_alias=AliasChoices("level", "niveau"))
+    hp:    int           = Field(0,    validation_alias=AliasChoices("HP", "hp", "hit_points",
+                                                                     "hp_current"),
+                                       serialization_alias="HP")
+    hp_max: Optional[int] = Field(None, validation_alias=AliasChoices("HP_max", "hp_max",
+                                                                       "max_hp"),
+                                        serialization_alias="HP_max")
+    ac:    int           = Field(10,   validation_alias=AliasChoices("AC", "ac", "armor_class"),
+                                       serialization_alias="AC")
+    str_:  Optional[int] = Field(None, validation_alias=AliasChoices("STR", "str"),
+                                       serialization_alias="STR")
+    dex:   Optional[int] = Field(None, validation_alias=AliasChoices("DEX", "dex"),
+                                       serialization_alias="DEX")
+    con:   Optional[int] = Field(None, validation_alias=AliasChoices("CON", "con"),
+                                       serialization_alias="CON")
+    int_:  Optional[int] = Field(None, validation_alias=AliasChoices("INT", "int"),
+                                       serialization_alias="INT")
+    wis:   Optional[int] = Field(None, validation_alias=AliasChoices("WIS", "wis"),
+                                       serialization_alias="WIS")
+    cha:   Optional[int] = Field(None, validation_alias=AliasChoices("CHA", "cha"),
+                                       serialization_alias="CHA")
+
+
+def _normalise_char(raw: dict) -> dict:
+    """Valide et normalise un dict personnage vers les clés canoniques (HP, AC, class…).
+    Les champs supplémentaires du joueur (gold, inventory…) sont conservés via extra='allow'."""
+    return Character.model_validate(raw).model_dump(by_alias=True, exclude_none=False)
+
+
 # ── Chargement des données SRD au démarrage ───────────────────────────────────
 def _load_json(path: Path, label: str) -> dict:
     if not path.exists():
@@ -164,13 +204,15 @@ class Session:
     party:            list[dict]           = field(default_factory=list)
     active_character: int | None           = None
     spell_slots_used: dict[str, list[int]] = field(default_factory=dict)
-    last_active:      float                = field(default_factory=time.monotonic)
+    last_active:      float                = field(default_factory=time.monotonic)  # monotonic: immune to wall-clock adjustments
 
 SESSIONS: dict[str, Session] = {}
 
 
 def get_session(session_id: str) -> Session:
     """Retourne la session existante ou en crée une nouvelle ; met à jour last_active."""
+    # Use get_session (creates) for write paths; SESSIONS.get (returns None) for read-only paths
+    # so that a stale/missing cookie never silently creates an empty session.
     if session_id not in SESSIONS:
         SESSIONS[session_id] = Session()
     sess = SESSIONS[session_id]
@@ -327,11 +369,7 @@ def apply_rest(session_id: str, rest_type: str) -> str:
 
     if rest_type == "long":
         for char in party:
-            for hp_key in ("HP", "hp", "hit_points"):
-                if hp_key in char:
-                    hp_max = char.get("HP_max", char.get("hp_max", char[hp_key]))
-                    char[hp_key] = hp_max
-                    break
+            char["HP"] = char.get("HP_max", char["HP"])
         for char in party:
             name = char_name(char)
             if name in slots_used:
@@ -342,7 +380,7 @@ def apply_rest(session_id: str, rest_type: str) -> str:
     elif rest_type == "short":
         for char in party:
             name       = char_name(char)
-            cls        = (char.get("class", char.get("classe", "")) or "").lower()
+            cls        = (char.get("class", "") or "").lower()
             is_warlock = any(w in cls for w in ["warlock", "occultiste", "pacte"])
             if is_warlock and name in slots_used:
                 slots_used[name] = [0] * 9
@@ -379,8 +417,8 @@ def init_spell_slots_for_party(session_id: str) -> None:
 
     for char in party:
         name        = char_name(char)
-        cls         = char.get("class", char.get("classe", ""))
-        level       = str(char.get("level", char.get("niveau", 1)))
+        cls         = char.get("class", "")
+        level       = str(char.get("level", 1))
         caster_type = _get_caster_type(cls)
 
         if not caster_type or name in slots_map:
@@ -490,8 +528,8 @@ def get_or_create_session_id(request: Request) -> str:
 
 
 def char_name(char: Dict) -> str:
-    """Retourne le nom d'un personnage (supporte clés FR et EN)."""
-    return char.get("name", char.get("nom", "?"))
+    """Retourne le nom d'un personnage. Après normalisation, la clé est toujours 'name'."""
+    return char.get("name", "?")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -513,9 +551,15 @@ def extract_party_from_input(user_input: str) -> Optional[List[Dict]]:
         characters = raw
     elif isinstance(raw, dict):
         for key in ("party", "characters", "groupe", "personnages"):
-            if key in raw and isinstance(raw[key], list):
-                characters = raw[key]
-                break
+            if key in raw:
+                val = raw[key]
+                if isinstance(val, list):
+                    characters = val
+                elif isinstance(val, dict):
+                    # "party": { single character } — wrap in list
+                    characters = [val]
+                if characters:
+                    break
         if not characters:
             for key in ("character", "personnage"):
                 if key in raw and isinstance(raw[key], dict):
@@ -528,9 +572,11 @@ def extract_party_from_input(user_input: str) -> Optional[List[Dict]]:
         return None
 
     for char in characters:
+        # Intersection (not subset): a single matching key is enough to recognise
+        # a character dict, because players use inconsistent field names (HP/hp/hit_points).
         if isinstance(char, dict) and (PARTY_REQUIRED_KEYS & set(char.keys())):
             logger.info(f"Groupe détecté: {len(characters)} personnage(s)")
-            return characters
+            return [_normalise_char(c) for c in characters if isinstance(c, dict)]
     return None
 
 
@@ -538,16 +584,16 @@ def build_party_context(party: List[Dict], active_idx: Optional[int] = None) -> 
     lines = ["ÉTAT ACTUEL DU GROUPE (maintenir ces valeurs tout au long de la partie):"]
     for i, char in enumerate(party):
         name   = char_name(char)
-        race   = char.get("race", "?")
-        cls    = char.get("class",  char.get("classe",  "?"))
-        level  = char.get("level",  char.get("niveau",  "?"))
-        hp     = char.get("HP",     char.get("hp",      char.get("hit_points", "?")))
-        hp_max = char.get("HP_max", char.get("hp_max",  hp))
-        ac     = char.get("AC",     char.get("ac",      char.get("armor_class", "?")))
+        race   = char.get("race",   "?")
+        cls    = char.get("class",  "?")
+        level  = char.get("level",  "?")
+        hp     = char.get("HP",     0)
+        hp_max = char.get("HP_max", hp)
+        ac     = char.get("AC",     0)
 
         stats = []
         for stat in ("STR", "DEX", "CON", "INT", "WIS", "CHA"):
-            val = char.get(stat, char.get(stat.lower()))
+            val = char.get(stat)
             if val is not None:
                 mod  = (int(val) - 10) // 2
                 sign = "+" if mod >= 0 else ""
@@ -636,14 +682,24 @@ def build_messages(
         if monsters_ctx:
             messages.append({"role": "system", "content": monsters_ctx})
 
+    # ×2 because each "turn" is two messages: one user + one assistant.
     recent = history[-(MAX_HISTORY_TURNS * 2):]
     messages.extend(recent)
     messages.append({"role": "user", "content": user_input})
 
+    ctx_chars = sum(len(m["content"]) for m in messages)
+    # Rough estimate: French LLM text ≈ 4 chars/token; num_ctx is 40 000 tokens = ~160 000 chars.
+    # Warn at 75 % to leave headroom for the reply.
+    if ctx_chars > 120_000:
+        logger.warning(
+            f"[CONTEXT] Contexte très large: {ctx_chars} chars (~{ctx_chars // 4}t) "
+            f"— proche de la limite num_ctx (40 000 t)"
+        )
     logger.info(
-        f"Messages: {len(messages)} | historique: {len(recent)} | "
+        f"[CONTEXT] {len(messages)} msgs | historique: {len(recent)} | "
         f"actif: {char_name(party[active_idx]) if party and active_idx is not None else 'none'} | "
-        f"monstres: {len(combat_monsters) if combat_monsters else 0}"
+        f"monstres: {len(combat_monsters) if combat_monsters else 0} | "
+        f"contexte: {ctx_chars} chars (~{ctx_chars // 4}t)"
     )
     return messages
 
@@ -657,17 +713,27 @@ _ollama_client: httpx.AsyncClient | None = None
 
 
 async def call_ollama(messages: List[Dict[str, str]]) -> tuple[str, int, int]:
+    if os.getenv("OLLAMA_MOCK"):
+        reply = os.getenv("OLLAMA_MOCK_REPLY", "Réponse simulée du Maître du Donjon.")
+        logger.info("[MOCK] Ollama mock actif — réponse fixe")
+        return reply, 0, 0
     try:
+        t0   = time.perf_counter()
         resp = await _ollama_client.post(
             "/api/chat",
             json={"model": OLLAMA_MODEL, "messages": messages, "stream": False},
         )
         resp.raise_for_status()
+        elapsed         = time.perf_counter() - t0
         data            = resp.json()
         prompt_tokens   = data.get("prompt_eval_count", 0)
         response_tokens = data.get("eval_count", 0)
         reply           = data["message"]["content"]
-        logger.info(f"Ollama: prompt={prompt_tokens}t réponse={response_tokens}t")
+        tps             = response_tokens / elapsed if elapsed > 0 else 0
+        logger.info(
+            f"[PERF] Ollama: {elapsed:.1f}s | "
+            f"prompt={prompt_tokens}t réponse={response_tokens}t ({tps:.1f} t/s)"
+        )
         return reply, prompt_tokens, response_tokens
     except httpx.ConnectError:
         logger.error("Ollama non accessible")
@@ -807,6 +873,8 @@ async def tts_piper(text: str, voice: str = DEFAULT_VOICE):
     # est géré côté JS avant l'appel. Chaque segment reçu ici est déjà court.
     text_clean = text.strip()
     try:
+        # Piper does not support streaming stdout output, so we write to a temp file
+        # and read it back after the process exits.
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             tmp_path = tmp.name
         proc = await asyncio.create_subprocess_exec(
@@ -816,10 +884,12 @@ async def tts_piper(text: str, voice: str = DEFAULT_VOICE):
             env=PIPER_ENV,
         )
         try:
+            t0_tts = time.perf_counter()
             _, stderr_data = await asyncio.wait_for(
                 proc.communicate(input=text_clean.encode("utf-8")),
                 timeout=30.0,
             )
+            elapsed_tts = time.perf_counter() - t0_tts
         except asyncio.TimeoutError:
             proc.kill()
             await proc.wait()
@@ -832,7 +902,7 @@ async def tts_piper(text: str, voice: str = DEFAULT_VOICE):
         with open(tmp_path, "rb") as f:
             wav_bytes = f.read()
         Path(tmp_path).unlink(missing_ok=True)
-        logger.info(f"TTS OK: {len(text_clean)} chars → {len(wav_bytes)} bytes")
+        logger.info(f"[PERF] TTS: {elapsed_tts:.2f}s | {len(text_clean)} chars → {len(wav_bytes)} bytes")
         return StreamingResponse(
             io.BytesIO(wav_bytes),
             media_type="audio/wav",
@@ -885,6 +955,8 @@ async def send_message(request: Request, user_input: str = Form(...)):
     automatiquement au personnage suivant (round-robin).
     En cas d'erreur Ollama, le tour n'avance pas (Step 5).
     """
+    t0_request = time.perf_counter()
+
     if len(user_input) > MAX_USER_INPUT_LEN:
         logger.warning("Input trop long, tronqué")
         user_input = user_input[:MAX_USER_INPUT_LEN]
@@ -892,13 +964,24 @@ async def send_message(request: Request, user_input: str = Form(...)):
     session_id = get_or_create_session_id(request)
     sess       = get_session(session_id)
 
+    active_name = (
+        char_name(sess.party[sess.active_character])
+        if sess.party and sess.active_character is not None
+        else "aucun"
+    )
+    logger.info(
+        f"[SESSION] {session_id[:8]} | groupe: {len(sess.party)} perso(s) | "
+        f"historique: {len(sess.conversations)} msgs | actif: {active_name}"
+    )
+
     # Détection JSON de groupe
     detected_party = extract_party_from_input(user_input)
     if detected_party:
         sess.party            = detected_party
         sess.active_character = 0
         init_spell_slots_for_party(session_id)
-        logger.info(f"Groupe chargé: {len(detected_party)} perso(s) — session {session_id[:8]}")
+        names = [char_name(c) for c in detected_party]
+        logger.info(f"Groupe chargé: {names} — session {session_id[:8]}")
 
     # P2b — détection commande de repos
     rest_type = detect_rest_command(user_input)
@@ -913,14 +996,7 @@ async def send_message(request: Request, user_input: str = Form(...)):
     combat_monsters = []
     for dm_text in recent_dm:
         combat_monsters.extend(detect_monsters_in_text(dm_text))
-    # Dédoublonnage par clé
-    seen_keys       = set()
-    unique_monsters = []
-    for m in combat_monsters:
-        if m["key"] not in seen_keys:
-            seen_keys.add(m["key"])
-            unique_monsters.append(m)
-    combat_monsters = unique_monsters
+    combat_monsters = list({m["key"]: m for m in combat_monsters}.values())
 
     messages    = build_messages(
         sess.conversations, user_input, sess.party, sess.active_character,
@@ -932,7 +1008,8 @@ async def send_message(request: Request, user_input: str = Form(...)):
     # Vérifier si c'est une erreur avant tout traitement (Step 5)
     is_error = reply.startswith("[ERREUR:")
 
-    # Nettoyage Markdown
+    # Must happen after the [ERREUR: check above — strip_markdown would destroy that prefix.
+    # Stripping before storage ensures both the UI and TTS always see clean text.
     reply = strip_markdown(reply)
 
     # P2a — si la réponse du DM introduit de nouveaux monstres via tag [COMBAT:]
@@ -946,7 +1023,8 @@ async def send_message(request: Request, user_input: str = Form(...)):
     sess.conversations.append({"role": "user",      "content": user_input})
     sess.conversations.append({"role": "assistant", "content": reply_clean})
 
-    # Avance au personnage suivant uniquement en cas de succès Ollama (Step 5)
+    # Only advance on success: an Ollama error must not consume a player's turn,
+    # otherwise the next player would act without getting a DM response first.
     if not is_error:
         advance_active_character(session_id)
 
@@ -955,6 +1033,7 @@ async def send_message(request: Request, user_input: str = Form(...)):
     # Compaction si l'historique dépasse le seuil
     await maybe_compact_history(session_id)
 
+    logger.info(f"[PERF] /send total: {time.perf_counter() - t0_request:.1f}s — session {session_id[:8]}")
     return RedirectResponse(url="/", status_code=303)
 
 
@@ -1006,12 +1085,7 @@ async def update_hp(request: Request):
         idx  = int(data["index"])
         hp   = int(data["hp"])
         if 0 <= idx < len(sess.party):
-            for key in ("HP", "hp", "hit_points"):
-                if key in sess.party[idx]:
-                    sess.party[idx][key] = hp
-                    break
-            else:
-                sess.party[idx]["HP"] = hp
+            sess.party[idx]["HP"] = hp
             logger.info(f"HP mis à jour: {char_name(sess.party[idx])} → {hp}")
             return JSONResponse({"ok": True})
     except Exception as e:
@@ -1060,6 +1134,157 @@ async def reset_conversation(request: Request):
     SESSIONS.pop(session_id, None)
     logger.info(f"Session reset: {session_id[:8]}")
     return RedirectResponse(url="/", status_code=303)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ROUTES DE TEST / DEBUG
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.post("/party")
+async def load_party_direct(request: Request):
+    """
+    Charge un groupe directement depuis un corps JSON — sans appel Ollama.
+    Accepte un tableau ou un objet unique (normalisé via Character).
+    Utile pour les tests automatisés et le débogage.
+    """
+    session_id = get_or_create_session_id(request)
+    sess = get_session(session_id)
+    try:
+        data = await request.json()
+        chars = data if isinstance(data, list) else [data]
+        if not chars:
+            return JSONResponse({"ok": False, "error": "liste vide"}, status_code=400)
+        sess.party            = [_normalise_char(c) for c in chars]
+        sess.active_character = 0
+        init_spell_slots_for_party(session_id)
+        names = [char_name(c) for c in sess.party]
+        logger.info(f"Groupe chargé via /party: {names} — session {session_id[:8]}")
+        response = JSONResponse({"ok": True, "party": names, "count": len(names)})
+        response.set_cookie("session_id", session_id, httponly=True)
+        return response
+    except Exception as e:
+        logger.error(f"Erreur /party: {e}")
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+
+
+@app.get("/debug/session")
+async def debug_session(request: Request):
+    """
+    Retourne l'état complet de la session en JSON.
+    Nécessite DEBUG=1 dans l'environnement — retourne 403 sinon.
+    """
+    if not os.getenv("DEBUG"):
+        return JSONResponse({"error": "debug non activé (DEBUG=1 requis)"}, status_code=403)
+    session_id = get_or_create_session_id(request)
+    sess = SESSIONS.get(session_id)
+    if not sess:
+        return JSONResponse({"error": "session introuvable"}, status_code=404)
+    return JSONResponse({
+        "session_id":         session_id,
+        "party_names":        [char_name(c) for c in sess.party],
+        "active_character":   sess.active_character,
+        "conversation_count": len(sess.conversations),
+        "spell_slots_used":   sess.spell_slots_used,
+    })
+
+
+@app.post("/load-session")
+async def load_session(request: Request):
+    """
+    Restaure un état de campagne complet depuis un fichier de sauvegarde JSON.
+
+    Structure attendue (tous les champs sauf party sont optionnels) :
+      { "party": {...} ou [{...}],
+        "recent_session_summary": "...",
+        "world_state": {...},
+        "npcs": [...],
+        "factions": [...],
+        "active_quests": [...],
+        "open_threads": [...] }
+
+    Injecte deux messages système en tête de l'historique :
+      1. [CONTEXTE DE CAMPAGNE]  — monde, PNJs, factions, quêtes
+      2. [RÉSUMÉ DE CAMPAGNE]    — résumé narratif de la session précédente
+    """
+    session_id = get_or_create_session_id(request)
+    sess = get_session(session_id)
+    try:
+        data = await request.json()
+
+        # ── Chargement du groupe ───────────────────────────────────────────
+        raw_party = data.get("party", [])
+        if isinstance(raw_party, dict):
+            raw_party = [raw_party]
+        if not raw_party:
+            return JSONResponse({"ok": False, "error": "party manquant"}, status_code=400)
+        sess.party            = [_normalise_char(c) for c in raw_party]
+        sess.active_character = 0
+        init_spell_slots_for_party(session_id)
+
+        context_msgs = 0
+
+        # ── Message 1 : contexte monde / PNJs / factions / quêtes ─────────
+        ctx_lines = ["[CONTEXTE DE CAMPAGNE]"]
+        world = data.get("world_state", {})
+        if world:
+            parts = []
+            if world.get("city"):    parts.append(f"Ville: {world['city']}")
+            if world.get("weather"): parts.append(f"Météo: {world['weather']}")
+            if world.get("time"):    parts.append(f"Heure: {world['time']}")
+            if parts:
+                ctx_lines.append(" | ".join(parts))
+
+        npcs = data.get("npcs", [])
+        if npcs:
+            ctx_lines.append("\nPNJs CONNUS:")
+            for npc in npcs:
+                line = f"  {npc.get('name','?')} — {npc.get('role','')}"
+                if npc.get("status"):   line += f" ({npc['status']})"
+                if npc.get("relation_to_player"): line += f" | Relation: {npc['relation_to_player']}"
+                ctx_lines.append(line)
+
+        factions = data.get("factions", [])
+        if factions:
+            ctx_lines.append("\nFACTIONS:")
+            for f in factions:
+                ctx_lines.append(f"  {f.get('name','?')} — {f.get('status','')}")
+
+        quests = data.get("active_quests", [])
+        if quests:
+            ctx_lines.append("\nQUÊTES ACTIVES:")
+            for q in quests:
+                ctx_lines.append(f"  - {q.get('title','?')} ({q.get('status','')})")
+
+        threads = data.get("open_threads", [])
+        if threads:
+            ctx_lines.append("\nFILS OUVERTS:")
+            for t in threads:
+                ctx_lines.append(f"  - {t}")
+
+        if len(ctx_lines) > 1:
+            sess.conversations.append({"role": "system", "content": "\n".join(ctx_lines)})
+            context_msgs += 1
+
+        # ── Message 2 : résumé narratif ────────────────────────────────────
+        summary = data.get("recent_session_summary", "").strip()
+        if summary:
+            sess.conversations.append({
+                "role":    "system",
+                "content": f"[RÉSUMÉ DE CAMPAGNE]\n{summary}",
+            })
+            context_msgs += 1
+
+        names = [char_name(c) for c in sess.party]
+        logger.info(
+            f"Session chargée via /load-session: {names}, {context_msgs} msg(s) contexte "
+            f"— session {session_id[:8]}"
+        )
+        response = JSONResponse({"ok": True, "party": names, "context_msgs": context_msgs})
+        response.set_cookie("session_id", session_id, httponly=True)
+        return response
+    except Exception as e:
+        logger.error(f"Erreur /load-session: {e}")
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
 
 
 @app.get("/health")
