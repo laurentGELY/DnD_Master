@@ -96,6 +96,9 @@ MAX_HISTORY_TURNS   = 50
 MAX_USER_INPUT_LEN  = 2000
 SESSION_TTL_SECONDS = 3 * 3600   # sessions inactives > 3h supprimées automatiquement
 
+COMPACT_THRESHOLD   = 80   # compacter quand l'historique dépasse 80 messages (40 tours)
+COMPACT_KEEP_RECENT = 40   # conserver les 40 messages les plus récents verbatim (20 tours)
+
 PARTY_REQUIRED_KEYS = {"name", "race", "class", "level", "HP", "AC",
                        "classe", "niveau", "hp", "ac", "hit_points"}
 
@@ -654,6 +657,66 @@ async def call_ollama(messages: List[Dict[str, str]]) -> tuple[str, int, int]:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# COMPACTION DE L'HISTORIQUE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+async def maybe_compact_history(session_id: str) -> None:
+    """
+    Compacte l'historique quand il dépasse COMPACT_THRESHOLD messages.
+
+    Les anciens échanges sont résumés par Ollama en un seul message système,
+    puis remplacent les messages originaux. Les COMPACT_KEEP_RECENT messages
+    les plus récents sont conservés verbatim pour la continuité narrative.
+
+    En cas d'erreur Ollama, l'historique est conservé intact (pas de perte).
+    """
+    sess = get_session(session_id)
+    if len(sess.conversations) <= COMPACT_THRESHOLD:
+        return
+
+    to_compact = sess.conversations[:-COMPACT_KEEP_RECENT]
+    to_keep    = sess.conversations[-COMPACT_KEEP_RECENT:]
+
+    logger.info(
+        f"Compaction déclenchée — session {session_id[:8]}: "
+        f"{len(to_compact)} messages → résumé + {len(to_keep)} récents"
+    )
+
+    summary_messages = [
+        {"role": "system", "content": get_system_prompt()},
+        *to_compact,
+        {
+            "role": "user",
+            "content": (
+                "Génère un résumé compact et exhaustif de tout ce qui s'est passé "
+                "dans la campagne jusqu'ici. Inclus : composition du groupe et état "
+                "actuel (HP, conditions), quête en cours et phase narrative, lieux "
+                "visités, PNJs importants et leur dernière position connue, événements "
+                "clés, décisions importantes des joueurs et leurs conséquences, ordre "
+                "du tour actuel. Sois précis et factuel — ce résumé remplacera "
+                "l'historique complet dans ton contexte."
+            ),
+        },
+    ]
+
+    summary, _, _ = await call_ollama(summary_messages)
+
+    if summary.startswith("[ERREUR:"):
+        logger.warning("Compaction échouée (erreur Ollama) — historique conservé intact")
+        return
+
+    summary_msg = {
+        "role":    "system",
+        "content": f"[RÉSUMÉ DE CAMPAGNE — {len(to_compact)} messages compactés]\n{strip_markdown(summary)}",
+    }
+    sess.conversations = [summary_msg] + to_keep
+    logger.info(
+        f"Compaction terminée — session {session_id[:8]}: "
+        f"historique réduit à {len(sess.conversations)} messages"
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # DÉMARRAGE / ARRÊT (Steps 3 + 7)
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -867,6 +930,10 @@ async def send_message(request: Request, user_input: str = Form(...)):
         advance_active_character(session_id)
 
     logger.info(f"Tour ajouté — session {session_id[:8]}, {len(sess.conversations)} messages")
+
+    # Compaction si l'historique dépasse le seuil
+    await maybe_compact_history(session_id)
+
     return RedirectResponse(url="/", status_code=303)
 
 
