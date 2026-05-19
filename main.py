@@ -2,8 +2,22 @@
 """
 D&D 5e AI Dungeon Master Web App
 ================================
-Version: 1.4.0 (2026-03-18)
+Version: 1.7.0 (2026-05-19)
 Licence: MIT (usage personnel)
+
+NOUVEAUTÉS v1.7.0
+-----------------
+- Subprocess Piper asynchrone — ne bloque plus l'event loop pendant la synthèse vocale
+- Client httpx partagé avec pool de connexions (une seule connexion TCP vers Ollama)
+- System prompt mis en cache par mtime — pas de lecture disque à chaque requête
+- État de session consolidé dans un dataclass Session (4 dicts → 1)
+- Expiration automatique des sessions inactives (SESSION_TTL_SECONDS, défaut 3h)
+- Constantes module-level pour PIPER_ENV et les listes de classes de lanceurs
+- Avancement du tour protégé : bloqué en cas d'erreur Ollama
+
+NOUVEAUTÉS v1.6.0
+-----------------
+- (voir historique git)
 
 NOUVEAUTÉS v1.4.0
 -----------------
@@ -16,7 +30,7 @@ NOUVEAUTÉS v1.4.0
 NOUVEAUTÉS v1.3.0
 -----------------
 - Tour par tour strict (combat ET hors combat)
-- Suivi du personnage actif en session (ACTIVE_CHARACTER)
+- Suivi du personnage actif en session (active_character)
 - Sélecteur de personnage actif dans l'interface → préfixe auto du message
 - Commande !ordre ajoutée au system prompt
 - Endpoint GET /party/active → retourne le personnage actif courant
@@ -30,14 +44,17 @@ source ../.venv/bin/activate
 uvicorn main:app --reload --host 127.0.0.1 --port 8000
 """
 
-import os
+import asyncio
 import io
 import json
+import os
+import time
+import tempfile
 import uuid
 import logging
 import re
-import tempfile
-import subprocess
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -50,7 +67,7 @@ from fastapi.templating import Jinja2Templates
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
-CODE_VERSION = "1.6.0"
+CODE_VERSION = "1.7.0"
 
 OLLAMA_URL   = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "dnd-dm-8b")
@@ -64,12 +81,20 @@ PIPER_LIBS_DIR = BASE_DIR / "bin" / "piper_amd64"
 VOICES_DIR     = BASE_DIR / "voices"
 DEFAULT_VOICE  = "fr_FR-gilles-low.onnx"
 
+# Piper environment — construit une seule fois au démarrage (Step 1)
+PIPER_ENV: dict = {
+    **os.environ,
+    "LD_LIBRARY_PATH":  str(PIPER_LIBS_DIR),
+    "ESPEAK_DATA_PATH": str(PIPER_LIBS_DIR / "espeak-ng-data"),
+}
+
 # Chemins vers les fichiers de données SRD
 MONSTERS_PATH = BASE_DIR / "data" / "monsters.json"
 SPELLS_PATH   = BASE_DIR / "data" / "spells.json"
 
-MAX_HISTORY_TURNS  = 15
-MAX_USER_INPUT_LEN = 2000
+MAX_HISTORY_TURNS   = 15
+MAX_USER_INPUT_LEN  = 2000
+SESSION_TTL_SECONDS = 3 * 3600   # sessions inactives > 3h supprimées automatiquement
 
 PARTY_REQUIRED_KEYS = {"name", "race", "class", "level", "HP", "AC",
                        "classe", "niveau", "hp", "ac", "hit_points"}
@@ -92,9 +117,11 @@ for key, data in MONSTERS_DB.items():
     for fr_name in data.get("fr", []):
         MONSTER_FR_INDEX[fr_name.lower()] = key
 
-# Spell slots actifs par session : { session_id: { char_name: [used_slot1, ...] } }
-# used_slot[i] = nombre d'emplacements de niveau (i+1) utilisés
-SPELL_SLOTS_USED: dict[str, dict[str, list[int]]] = {}
+# Listes de classes de lanceurs — extraites une fois au démarrage (Step 1)
+_FULL_CASTER_CLASSES:  list[str] = SPELLS_DB.get("full_casters",  {}).get("_classes", [])
+_HALF_CASTER_CLASSES:  list[str] = SPELLS_DB.get("half_casters",  {}).get("_classes", [])
+_WARLOCK_CLASSES:      list[str] = SPELLS_DB.get("warlock",       {}).get("_classes", [])
+_THIRD_CASTER_CLASSES: list[str] = SPELLS_DB.get("third_casters", {}).get("_classes", [])
 
 logging.basicConfig(
     level=logging.INFO,
@@ -103,14 +130,38 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# NETTOYAGE MARKDOWN (Amélioration 1)
+# ÉTAT DE SESSION (Step 4)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@dataclass
+class Session:
+    """Tout l'état d'une session de jeu. Une instance par UUID cookie."""
+    conversations:    list[dict]           = field(default_factory=list)
+    party:            list[dict]           = field(default_factory=list)
+    active_character: int | None           = None
+    spell_slots_used: dict[str, list[int]] = field(default_factory=dict)
+    last_active:      float                = field(default_factory=time.monotonic)
+
+SESSIONS: dict[str, Session] = {}
+
+
+def get_session(session_id: str) -> Session:
+    """Retourne la session existante ou en crée une nouvelle ; met à jour last_active."""
+    if session_id not in SESSIONS:
+        SESSIONS[session_id] = Session()
+    sess = SESSIONS[session_id]
+    sess.last_active = time.monotonic()
+    return sess
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# NETTOYAGE MARKDOWN
 # ═══════════════════════════════════════════════════════════════════════════════
 # Le modèle génère du Markdown par réflexe (**gras**, *italique*, ### titres…).
 # Ces caractères sont affichés tels quels dans l'interface et prononcés
 # littéralement par le TTS ("astérisque astérisque mot astérisque astérisque").
 # On nettoie la réponse une seule fois côté serveur, avant toute sauvegarde,
 # ce qui garantit que l'affichage ET le TTS reçoivent du texte brut propre.
-# ═══════════════════════════════════════════════════════════════════════════════
 
 def strip_markdown(text: str) -> str:
     """
@@ -125,7 +176,7 @@ def strip_markdown(text: str) -> str:
       5. Code     : `mot`      →  mot
       6. Lignes horizontales : --- ou *** seuls sur une ligne → vide
       7. Listes   : - item ou * item → item   (retire seulement le marqueur)
-      8. Espaces multiples résiduels → espace simple
+      8. Nettoyage résiduel : plus de trois sauts de ligne → deux max
     """
     # 1. Titres ATX (# à ######)
     text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
@@ -142,7 +193,7 @@ def strip_markdown(text: str) -> str:
     text = re.sub(r'^\s*[-*_]{3,}\s*$', '', text, flags=re.MULTILINE)
     # 7. Marqueurs de listes (- item  ou  * item  en début de ligne)
     text = re.sub(r'^\s*[-*]\s+', '', text, flags=re.MULTILINE)
-    # 8. Nettoyage résiduel : plus de trois sauts de ligne consécutifs → deux max
+    # 8. Plus de trois sauts de ligne consécutifs → deux max
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
 
@@ -157,7 +208,7 @@ def detect_monsters_in_text(text: str) -> list[dict]:
 
     Deux stratégies combinées (tag prioritaire, regex en fallback) :
 
-    1. TAG [COMBAT: nom1, nom2] dans la réponse du DM (strategy B)
+    1. TAG [COMBAT: nom1, nom2] dans la réponse du DM
        Exemple : [COMBAT: gobelin, loup géant]
        → fiable, explicite, pas d'ambiguïté
 
@@ -165,8 +216,7 @@ def detect_monsters_in_text(text: str) -> list[dict]:
        → utile pour les monstres mentionnés sans tag
        → peut générer des faux positifs sur des noms communs courts
 
-    Returns: liste de dicts stats monstres (peut contenir des doublons intentionnels
-             si plusieurs exemplaires du même monstre sont mentionnés).
+    Returns: liste de dicts stats monstres.
     """
     found = []
 
@@ -177,7 +227,6 @@ def detect_monsters_in_text(text: str) -> list[dict]:
         for name in names:
             key = MONSTER_FR_INDEX.get(name)
             if not key:
-                # Essai avec le nom anglais directement
                 key = name if name in MONSTERS_DB else None
             if key and key in MONSTERS_DB:
                 found.append({"key": key, **MONSTERS_DB[key]})
@@ -188,11 +237,9 @@ def detect_monsters_in_text(text: str) -> list[dict]:
     # Stratégie B : regex sur les noms FR du compendium
     text_lower = text.lower()
     for fr_name, key in MONSTER_FR_INDEX.items():
-        # Ignore les noms très courts (< 4 chars) — trop de faux positifs
-        if len(fr_name) < 4:
+        if len(fr_name) < 4:   # noms trop courts → trop de faux positifs
             continue
         if fr_name in text_lower and key in MONSTERS_DB:
-            # Vérifie qu'on ne l'a pas déjà ajouté
             if not any(m["key"] == key for m in found):
                 found.append({"key": key, **MONSTERS_DB[key]})
 
@@ -204,7 +251,7 @@ def detect_monsters_in_text(text: str) -> list[dict]:
 def build_monsters_context(monsters: list[dict]) -> str:
     """
     Formate le bloc de stats monstres à injecter dans le contexte Ollama.
-    Injecté uniquement quand un combat est détecté — évite de polluer le contexte.
+    Injecté uniquement quand un combat est détecté.
     """
     if not monsters:
         return ""
@@ -231,9 +278,9 @@ def detect_rest_command(text: str) -> Optional[str]:
     Returns: "short", "long", ou None.
     """
     t = text.strip().lower()
-    if re.search(r'!rest|!shortrest|repos court|short rest', t):
+    if re.search(r'!rest|!shortrest|repos court|short rest', t):
         return "short"
-    if re.search(r'!longrest|!long|repos long|long rest', t):
+    if re.search(r'!longrest|!long|repos long|long rest', t):
         return "long"
     return None
 
@@ -244,28 +291,23 @@ def apply_rest(session_id: str, rest_type: str) -> str:
 
     Short rest :
     - Warlock : récupère tous ses emplacements de pacte
-    - Autres lanceurs : rien (leurs slots se récupèrent sur long rest)
     - Toutes classes : peuvent dépenser des Hit Dice (géré narrativement par le DM)
 
     Long rest :
     - Tous les personnages : HP max, tous les emplacements de sorts récupérés
-    - Met à jour PARTY_STATES (HP) et SPELL_SLOTS_USED (reset à 0)
-
-    Returns: message de confirmation formaté pour l'affichage.
     """
-    party = PARTY_STATES.get(session_id, [])
-    slots_used = SPELL_SLOTS_USED.setdefault(session_id, {})
-    results = []
+    sess       = get_session(session_id)
+    party      = sess.party
+    slots_used = sess.spell_slots_used
+    results    = []
 
     if rest_type == "long":
-        # Récupération complète HP
         for char in party:
             for hp_key in ("HP", "hp", "hit_points"):
                 if hp_key in char:
                     hp_max = char.get("HP_max", char.get("hp_max", char[hp_key]))
                     char[hp_key] = hp_max
                     break
-        # Remise à zéro de tous les emplacements
         for char in party:
             name = char_name(char)
             if name in slots_used:
@@ -274,10 +316,9 @@ def apply_rest(session_id: str, rest_type: str) -> str:
         logger.info(f"Long rest appliqué — session {session_id[:8]}")
 
     elif rest_type == "short":
-        # Warlock récupère ses emplacements de pacte sur repos court
         for char in party:
-            name  = char_name(char)
-            cls   = (char.get("class", char.get("classe", "")) or "").lower()
+            name       = char_name(char)
+            cls        = (char.get("class", char.get("classe", "")) or "").lower()
             is_warlock = any(w in cls for w in ["warlock", "occultiste", "pacte"])
             if is_warlock and name in slots_used:
                 slots_used[name] = [0] * 9
@@ -295,14 +336,10 @@ def apply_rest(session_id: str, rest_type: str) -> str:
 def _get_caster_type(class_name: str) -> Optional[str]:
     """Retourne le type de lanceur de sorts d'une classe, ou None si non-lanceur."""
     cls = (class_name or "").lower().strip()
-    full  = SPELLS_DB.get("full_casters",  {}).get("_classes", [])
-    half  = SPELLS_DB.get("half_casters",  {}).get("_classes", [])
-    wlock = SPELLS_DB.get("warlock",       {}).get("_classes", [])
-    third = SPELLS_DB.get("third_casters", {}).get("_classes", [])
-    if any(c in cls for c in full):  return "full"
-    if any(c in cls for c in half):  return "half"
-    if any(c in cls for c in wlock): return "warlock"
-    if any(c in cls for c in third): return "third"
+    if any(c in cls for c in _FULL_CASTER_CLASSES):  return "full"
+    if any(c in cls for c in _HALF_CASTER_CLASSES):  return "half"
+    if any(c in cls for c in _WARLOCK_CLASSES):       return "warlock"
+    if any(c in cls for c in _THIRD_CASTER_CLASSES):  return "third"
     return None
 
 
@@ -312,8 +349,9 @@ def init_spell_slots_for_party(session_id: str) -> None:
     Appelé quand un groupe est chargé. Ne réinitialise pas si déjà présent
     (évite d'écraser l'état en cours si le joueur renvoie son JSON).
     """
-    party     = PARTY_STATES.get(session_id, [])
-    slots_map = SPELL_SLOTS_USED.setdefault(session_id, {})
+    sess      = get_session(session_id)
+    party     = sess.party
+    slots_map = sess.spell_slots_used
 
     for char in party:
         name        = char_name(char)
@@ -327,22 +365,18 @@ def init_spell_slots_for_party(session_id: str) -> None:
         if caster_type == "warlock":
             wlock_data = SPELLS_DB.get("warlock", {}).get("slots_by_level", {})
             lvl_data   = wlock_data.get(level, {"slots": 0, "slot_level": 1})
-            # Warlock : un seul niveau d'emplacement, tous identiques
-            # On stocke quand même sur 9 niveaux pour uniformité, seul le niveau
-            # de pacte a des slots non-nuls
-            slots = [0] * 9
-            slot_lvl = lvl_data.get("slot_level", 1) - 1
-            # slots_map stocke les emplacements DISPONIBLES (max)
-            slots_map[name] = [0] * 9  # used = 0 au départ
-            char["_slots_max"]   = [0] * 9
+            # Warlock : un seul niveau d'emplacement — stocké sur 9 niveaux pour uniformité
+            slots_map[name]    = [0] * 9
+            char["_slots_max"] = [0] * 9
+            slot_lvl           = lvl_data.get("slot_level", 1) - 1
             char["_slots_max"][slot_lvl] = lvl_data.get("slots", 0)
             char["_caster_type"] = "warlock"
             char["_slot_level"]  = slot_lvl + 1
         else:
-            tbl_key  = f"{caster_type}_casters" if caster_type != "third" else "third_casters"
-            tbl      = SPELLS_DB.get(tbl_key, {}).get("slots_by_level", {})
-            max_slots = tbl.get(level, [0]*9)
-            slots_map[name]      = [0] * 9   # used
+            tbl_key   = f"{caster_type}_casters" if caster_type != "third" else "third_casters"
+            tbl       = SPELLS_DB.get(tbl_key, {}).get("slots_by_level", {})
+            max_slots = tbl.get(level, [0] * 9)
+            slots_map[name]      = [0] * 9
             char["_slots_max"]   = max_slots
             char["_caster_type"] = caster_type
 
@@ -354,8 +388,11 @@ def get_slots_display(session_id: str) -> list[dict]:
     Retourne l'état des emplacements de sorts pour tous les lanceurs du groupe.
     Format utilisé par le template Jinja2 pour le panneau sorts.
     """
-    party     = PARTY_STATES.get(session_id, [])
-    slots_map = SPELL_SLOTS_USED.get(session_id, {})
+    sess = SESSIONS.get(session_id)
+    if not sess:
+        return []
+    party     = sess.party
+    slots_map = sess.spell_slots_used
     result    = []
 
     for char in party:
@@ -365,7 +402,7 @@ def get_slots_display(session_id: str) -> list[dict]:
         if not max_slots or not ctype:
             continue   # Non-lanceur
 
-        used = slots_map.get(name, [0]*9)
+        used         = slots_map.get(name, [0] * 9)
         spell_levels = []
         for i, (mx, us) in enumerate(zip(max_slots, used)):
             if mx > 0:
@@ -399,34 +436,25 @@ def build_slots_context(session_id: str) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# ÉTAT APPLICATION
-# ═══════════════════════════════════════════════════════════════════════════════
-
-CONVERSATIONS:    Dict[str, List[Dict[str, str]]] = {}
-PARTY_STATES:     Dict[str, List[Dict]]           = {}
-
-# Personnage actif par session — index dans PARTY_STATES[session_id].
-# None = aucun groupe chargé ou mode libre.
-# Avance automatiquement après chaque message envoyé (round-robin).
-ACTIVE_CHARACTER: Dict[str, Optional[int]]        = {}
-
-app = FastAPI(title="D&D 5e AI DM", version=CODE_VERSION)
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
 # HELPERS — UTILITAIRES GÉNÉRAUX
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# Cache du system prompt — relu seulement si le fichier a changé sur disque (Step 2)
+_prompt_cache: str   = ""
+_prompt_mtime: float = 0.0
+
+
 def get_system_prompt() -> str:
+    global _prompt_cache, _prompt_mtime
     if not SYSTEM_PROMPT_PATH.exists():
         logger.error(f"Fichier prompt manquant: {SYSTEM_PROMPT_PATH}")
         return "[ERREUR: Créez prompts/system_prompt.txt]"
-    with open(SYSTEM_PROMPT_PATH, "r", encoding="utf-8") as f:
-        prompt = f.read().strip()
-    logger.info(f"Prompt chargé: {len(prompt)} caractères")
-    return prompt
+    mtime = SYSTEM_PROMPT_PATH.stat().st_mtime
+    if mtime != _prompt_mtime:
+        _prompt_cache = SYSTEM_PROMPT_PATH.read_text(encoding="utf-8").strip()
+        _prompt_mtime = mtime
+        logger.info(f"Prompt rechargé: {len(_prompt_cache)} caractères")
+    return _prompt_cache
 
 
 def get_or_create_session_id(request: Request) -> str:
@@ -509,7 +537,6 @@ def build_party_context(party: List[Dict], active_idx: Optional[int] = None) -> 
             + marker
         )
 
-    # Rappel explicite du personnage actif — crucial pour le respect du tour par tour
     if active_idx is not None and 0 <= active_idx < len(party):
         active_name = char_name(party[active_idx])
         lines.append(f"\nPERSONNAGE QUI AGIT MAINTENANT: {active_name}")
@@ -524,19 +551,20 @@ def build_party_context(party: List[Dict], active_idx: Optional[int] = None) -> 
 def advance_active_character(session_id: str) -> None:
     """
     Passe au personnage suivant dans l'ordre round-robin.
-    Appelé après chaque message envoyé avec succès.
+    Appelé uniquement après un échange Ollama réussi.
     """
-    party = PARTY_STATES.get(session_id, [])
+    sess  = get_session(session_id)
+    party = sess.party
     if not party:
         return
-    current = ACTIVE_CHARACTER.get(session_id)
+    current = sess.active_character
     if current is None:
-        ACTIVE_CHARACTER[session_id] = 0
+        sess.active_character = 0
     else:
-        ACTIVE_CHARACTER[session_id] = (current + 1) % len(party)
+        sess.active_character = (current + 1) % len(party)
     logger.info(
-        f"Personnage actif → {char_name(party[ACTIVE_CHARACTER[session_id]])} "
-        f"(idx {ACTIVE_CHARACTER[session_id]}) — session {session_id[:8]}"
+        f"Personnage actif → {char_name(party[sess.active_character])} "
+        f"(idx {sess.active_character}) — session {session_id[:8]}"
     )
 
 
@@ -545,17 +573,17 @@ def advance_active_character(session_id: str) -> None:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def build_messages(
-    history:        List[Dict[str, str]],
-    user_input:     str,
-    party:          Optional[List[Dict]] = None,
-    active_idx:     Optional[int]        = None,
-    session_id:     Optional[str]        = None,
-    combat_monsters: Optional[list]      = None,
+    history:         List[Dict[str, str]],
+    user_input:      str,
+    party:           Optional[List[Dict]] = None,
+    active_idx:      Optional[int]        = None,
+    session_id:      Optional[str]        = None,
+    combat_monsters: Optional[list]       = None,
 ) -> List[Dict[str, str]]:
     """
     Construit la liste de messages pour l'API Ollama.
 
-    Ordre des messages système (tous permanents, hors fenêtre glissante) :
+    Ordre des messages système (hors fenêtre glissante) :
         1. Prompt DM principal
         2. État du groupe + personnage actif
         3. Emplacements de sorts disponibles (si lanceurs dans le groupe)
@@ -574,13 +602,11 @@ def build_messages(
             "content": build_party_context(party, active_idx)
         })
 
-    # P2c — emplacements de sorts
     if session_id:
         slots_ctx = build_slots_context(session_id)
         if slots_ctx:
             messages.append({"role": "system", "content": slots_ctx})
 
-    # P2a — stats des monstres en combat
     if combat_monsters:
         monsters_ctx = build_monsters_context(combat_monsters)
         if monsters_ctx:
@@ -599,23 +625,26 @@ def build_messages(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# HELPERS — OLLAMA
+# HELPERS — OLLAMA (Step 3)
 # ═══════════════════════════════════════════════════════════════════════════════
+
+# Client httpx partagé — initialisé au démarrage par le lifespan
+_ollama_client: httpx.AsyncClient | None = None
+
 
 async def call_ollama(messages: List[Dict[str, str]]) -> tuple[str, int, int]:
     try:
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(
-                f"{OLLAMA_URL}/api/chat",
-                json={"model": OLLAMA_MODEL, "messages": messages, "stream": False},
-            )
-            resp.raise_for_status()
-            data            = resp.json()
-            prompt_tokens   = data.get("prompt_eval_count", 0)
-            response_tokens = data.get("eval_count", 0)
-            reply           = data["message"]["content"]
-            logger.info(f"Ollama: prompt={prompt_tokens}t réponse={response_tokens}t")
-            return reply, prompt_tokens, response_tokens
+        resp = await _ollama_client.post(
+            "/api/chat",
+            json={"model": OLLAMA_MODEL, "messages": messages, "stream": False},
+        )
+        resp.raise_for_status()
+        data            = resp.json()
+        prompt_tokens   = data.get("prompt_eval_count", 0)
+        response_tokens = data.get("eval_count", 0)
+        reply           = data["message"]["content"]
+        logger.info(f"Ollama: prompt={prompt_tokens}t réponse={response_tokens}t")
+        return reply, prompt_tokens, response_tokens
     except httpx.ConnectError:
         logger.error("Ollama non accessible")
         return "[ERREUR: Ollama non démarré — lancez 'ollama serve']", 0, 0
@@ -625,7 +654,50 @@ async def call_ollama(messages: List[Dict[str, str]]) -> tuple[str, int, int]:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# PIPER TTS
+# DÉMARRAGE / ARRÊT (Steps 3 + 7)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+async def _cleanup_sessions() -> None:
+    """Supprime les sessions inactives depuis plus de SESSION_TTL_SECONDS."""
+    while True:
+        await asyncio.sleep(600)   # vérification toutes les 10 minutes
+        cutoff  = time.monotonic() - SESSION_TTL_SECONDS
+        expired = [sid for sid, s in list(SESSIONS.items()) if s.last_active < cutoff]
+        for sid in expired:
+            SESSIONS.pop(sid, None)
+        if expired:
+            logger.info(f"{len(expired)} session(s) expirées supprimées — {len(SESSIONS)} actives")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _ollama_client
+    _ollama_client = httpx.AsyncClient(
+        base_url=OLLAMA_URL,
+        timeout=httpx.Timeout(connect=5.0, read=120.0, write=10.0, pool=5.0),
+        limits=httpx.Limits(max_connections=5, max_keepalive_connections=2),
+    )
+    cleanup_task = asyncio.create_task(_cleanup_sessions())
+    yield
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
+    await _ollama_client.aclose()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# APPLICATION
+# ═══════════════════════════════════════════════════════════════════════════════
+
+app = FastAPI(title="D&D 5e AI DM", version=CODE_VERSION, lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PIPER TTS (Step 6 — subprocess asynchrone)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @app.get("/voices")
@@ -650,21 +722,27 @@ async def tts_piper(text: str, voice: str = DEFAULT_VOICE):
     # Pas de limite de longueur côté serveur — le découpage en segments
     # est géré côté JS avant l'appel. Chaque segment reçu ici est déjà court.
     text_clean = text.strip()
-    piper_env  = {
-        **os.environ,
-        "LD_LIBRARY_PATH": str(PIPER_LIBS_DIR),
-        "ESPEAK_DATA_PATH": str(PIPER_LIBS_DIR / "espeak-ng-data"),
-    }
     try:
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             tmp_path = tmp.name
-        proc = subprocess.run(
-            [str(PIPER_BIN), "--model", str(model_path), "--output_file", tmp_path],
-            input=text_clean.encode("utf-8"),
-            capture_output=True, timeout=30, env=piper_env,
+        proc = await asyncio.create_subprocess_exec(
+            str(PIPER_BIN), "--model", str(model_path), "--output_file", tmp_path,
+            stdin=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=PIPER_ENV,
         )
+        try:
+            _, stderr_data = await asyncio.wait_for(
+                proc.communicate(input=text_clean.encode("utf-8")),
+                timeout=30.0,
+            )
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            Path(tmp_path).unlink(missing_ok=True)
+            return HTMLResponse("TTS timeout", status_code=500)
         if proc.returncode != 0:
-            logger.error(f"Piper stderr: {proc.stderr.decode()}")
+            logger.error(f"Piper stderr: {stderr_data.decode()}")
             Path(tmp_path).unlink(missing_ok=True)
             return HTMLResponse("Piper a échoué", status_code=500)
         with open(tmp_path, "rb") as f:
@@ -676,8 +754,6 @@ async def tts_piper(text: str, voice: str = DEFAULT_VOICE):
             media_type="audio/wav",
             headers={"Cache-Control": "no-cache"},
         )
-    except subprocess.TimeoutExpired:
-        return HTMLResponse("TTS timeout", status_code=500)
     except Exception as e:
         logger.error(f"TTS erreur: {e}")
         return HTMLResponse(f"TTS erreur: {e}", status_code=500)
@@ -690,21 +766,18 @@ async def tts_piper(text: str, voice: str = DEFAULT_VOICE):
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     session_id  = get_or_create_session_id(request)
-    history     = CONVERSATIONS.get(session_id, [])
-    party       = PARTY_STATES.get(session_id, [])
-    active_idx  = ACTIVE_CHARACTER.get(session_id)
-    total_chars = sum(len(msg["content"]) for msg in history)
-
+    sess        = get_session(session_id)
+    total_chars = sum(len(msg["content"]) for msg in sess.conversations)
     spell_slots = get_slots_display(session_id)
 
     response = templates.TemplateResponse(
         "index.html",
         {
             "request":      request,
-            "history":      history,
-            "party":        party,
-            "active_idx":   active_idx,
-            "spell_slots":  spell_slots,     # P2c : emplacements de sorts pour le panneau
+            "history":      sess.conversations,
+            "party":        sess.party,
+            "active_idx":   sess.active_character,
+            "spell_slots":  spell_slots,
             "session_id":   session_id[:8],
             "total_chars":  total_chars,
             "code_version": CODE_VERSION,
@@ -724,45 +797,40 @@ async def send_message(request: Request, user_input: str = Form(...)):
     Le message est attendu préfixé par le JS avec le nom du personnage actif :
     "Thorin : j'attaque le gobelin [d20: 17]"
 
-    Après chaque envoi réussi, advance_active_character() passe
+    Après chaque échange Ollama réussi, advance_active_character() passe
     automatiquement au personnage suivant (round-robin).
+    En cas d'erreur Ollama, le tour n'avance pas (Step 5).
     """
     if len(user_input) > MAX_USER_INPUT_LEN:
         logger.warning("Input trop long, tronqué")
         user_input = user_input[:MAX_USER_INPUT_LEN]
 
     session_id = get_or_create_session_id(request)
-    history    = CONVERSATIONS.setdefault(session_id, [])
+    sess       = get_session(session_id)
 
     # Détection JSON de groupe
     detected_party = extract_party_from_input(user_input)
     if detected_party:
-        PARTY_STATES[session_id]     = detected_party
-        ACTIVE_CHARACTER[session_id] = 0
-        # P2c — initialisation des emplacements de sorts
+        sess.party            = detected_party
+        sess.active_character = 0
         init_spell_slots_for_party(session_id)
         logger.info(f"Groupe chargé: {len(detected_party)} perso(s) — session {session_id[:8]}")
-
-    party      = PARTY_STATES.get(session_id)
-    active_idx = ACTIVE_CHARACTER.get(session_id)
 
     # P2b — détection commande de repos
     rest_type = detect_rest_command(user_input)
     if rest_type:
-        rest_msg = apply_rest(session_id, rest_type)
-        # Le message de repos est ajouté comme action du joueur,
-        # puis on laisse Ollama narrer les effets du repos
+        rest_msg   = apply_rest(session_id, rest_type)
         user_input = user_input + "\n[Systeme: " + rest_msg + "]"
 
     # P2a — détection des monstres dans les derniers messages du DM
     # On analyse les 2 derniers messages assistant pour capturer les combats
     # démarrés dans le tour précédent (le DM a pu annoncer un monstre avant)
-    recent_dm = [m["content"] for m in history[-4:] if m["role"] == "assistant"]
+    recent_dm       = [m["content"] for m in sess.conversations[-4:] if m["role"] == "assistant"]
     combat_monsters = []
     for dm_text in recent_dm:
         combat_monsters.extend(detect_monsters_in_text(dm_text))
     # Dédoublonnage par clé
-    seen_keys = set()
+    seen_keys       = set()
     unique_monsters = []
     for m in combat_monsters:
         if m["key"] not in seen_keys:
@@ -770,18 +838,20 @@ async def send_message(request: Request, user_input: str = Form(...)):
             unique_monsters.append(m)
     combat_monsters = unique_monsters
 
-    messages   = build_messages(
-        history, user_input, party, active_idx,
+    messages    = build_messages(
+        sess.conversations, user_input, sess.party, sess.active_character,
         session_id=session_id,
         combat_monsters=combat_monsters if combat_monsters else None,
     )
     reply, _, _ = await call_ollama(messages)
 
-    # Nettoyage Markdown + détection monstres dans la NOUVELLE réponse du DM
+    # Vérifier si c'est une erreur avant tout traitement (Step 5)
+    is_error = reply.startswith("[ERREUR:")
+
+    # Nettoyage Markdown
     reply = strip_markdown(reply)
 
-    # P2a — si la réponse du DM introduit de nouveaux monstres via tag [COMBAT:],
-    # on les stocke pour le prochain tour (ils seront dans recent_dm)
+    # P2a — si la réponse du DM introduit de nouveaux monstres via tag [COMBAT:]
     new_monsters = detect_monsters_in_text(reply)
     if new_monsters:
         logger.info(f"Nouveaux monstres détectés dans réponse DM: {[m['key'] for m in new_monsters]}")
@@ -789,13 +859,14 @@ async def send_message(request: Request, user_input: str = Form(...)):
     # Suppression du tag [COMBAT:...] de la réponse affichée (tag interne)
     reply_clean = re.sub(r'\[COMBAT:[^\]]*\]', '', reply).strip()
 
-    history.append({"role": "user",      "content": user_input})
-    history.append({"role": "assistant", "content": reply_clean})
+    sess.conversations.append({"role": "user",      "content": user_input})
+    sess.conversations.append({"role": "assistant", "content": reply_clean})
 
-    # Avance au personnage suivant APRÈS sauvegarde réussie
-    advance_active_character(session_id)
+    # Avance au personnage suivant uniquement en cas de succès Ollama (Step 5)
+    if not is_error:
+        advance_active_character(session_id)
 
-    logger.info(f"Tour ajouté — session {session_id[:8]}, {len(history)} messages")
+    logger.info(f"Tour ajouté — session {session_id[:8]}, {len(sess.conversations)} messages")
     return RedirectResponse(url="/", status_code=303)
 
 
@@ -803,13 +874,12 @@ async def send_message(request: Request, user_input: str = Form(...)):
 async def get_active_character(request: Request):
     """Retourne le personnage actif courant (utilisé par le JS au chargement)."""
     session_id = get_or_create_session_id(request)
-    party      = PARTY_STATES.get(session_id, [])
-    active_idx = ACTIVE_CHARACTER.get(session_id)
-    if not party or active_idx is None:
+    sess       = SESSIONS.get(session_id)
+    if not sess or not sess.party or sess.active_character is None:
         return JSONResponse({"active_idx": None, "name": None})
     return JSONResponse({
-        "active_idx": active_idx,
-        "name":       char_name(party[active_idx]),
+        "active_idx": sess.active_character,
+        "name":       char_name(sess.party[sess.active_character]),
     })
 
 
@@ -820,13 +890,15 @@ async def set_active_character(request: Request):
     Body JSON : {"index": N}
     """
     session_id = get_or_create_session_id(request)
-    party      = PARTY_STATES.get(session_id, [])
+    sess       = SESSIONS.get(session_id)
+    if not sess:
+        return JSONResponse({"ok": False}, status_code=400)
     try:
         data = await request.json()
         idx  = int(data["index"])
-        if 0 <= idx < len(party):
-            ACTIVE_CHARACTER[session_id] = idx
-            name = char_name(party[idx])
+        if 0 <= idx < len(sess.party):
+            sess.active_character = idx
+            name = char_name(sess.party[idx])
             logger.info(f"Personnage actif forcé: {name} — session {session_id[:8]}")
             return JSONResponse({"ok": True, "active_idx": idx, "name": name})
     except Exception as e:
@@ -838,19 +910,21 @@ async def set_active_character(request: Request):
 async def update_hp(request: Request):
     """Mise à jour AJAX des HP d'un personnage. Body : {"index": N, "hp": V}"""
     session_id = get_or_create_session_id(request)
-    party      = PARTY_STATES.get(session_id, [])
+    sess       = SESSIONS.get(session_id)
+    if not sess:
+        return JSONResponse({"ok": False}, status_code=400)
     try:
         data = await request.json()
         idx  = int(data["index"])
         hp   = int(data["hp"])
-        if 0 <= idx < len(party):
+        if 0 <= idx < len(sess.party):
             for key in ("HP", "hp", "hit_points"):
-                if key in party[idx]:
-                    party[idx][key] = hp
+                if key in sess.party[idx]:
+                    sess.party[idx][key] = hp
                     break
             else:
-                party[idx]["HP"] = hp
-            logger.info(f"HP mis à jour: {char_name(party[idx])} → {hp}")
+                sess.party[idx]["HP"] = hp
+            logger.info(f"HP mis à jour: {char_name(sess.party[idx])} → {hp}")
             return JSONResponse({"ok": True})
     except Exception as e:
         logger.error(f"Erreur update HP: {e}")
@@ -861,30 +935,29 @@ async def update_hp(request: Request):
 async def use_spell_slot(request: Request):
     """
     Marque un emplacement de sort comme utilisé.
-    Appelé depuis le panneau sorts quand le joueur coche un emplacement.
     Body JSON : {"char_name": "Aria", "slot_level": 2, "delta": 1}
     delta = +1 (utiliser) ou -1 (récupérer manuellement)
     """
     session_id = get_or_create_session_id(request)
-    slots_map  = SPELL_SLOTS_USED.get(session_id, {})
-    party      = PARTY_STATES.get(session_id, [])
+    sess       = SESSIONS.get(session_id)
+    if not sess:
+        return JSONResponse({"ok": False, "error": "session not found"}, status_code=400)
     try:
-        data       = await request.json()
-        cname      = data["char_name"]
-        slot_lvl   = int(data["slot_level"]) - 1   # 0-indexed
-        delta      = int(data.get("delta", 1))
+        data     = await request.json()
+        cname    = data["char_name"]
+        slot_lvl = int(data["slot_level"]) - 1   # 0-indexed
+        delta    = int(data.get("delta", 1))
 
-        # Trouve le max pour ce niveau
-        char = next((c for c in party if char_name(c) == cname), None)
+        char = next((c for c in sess.party if char_name(c) == cname), None)
         if not char:
             return JSONResponse({"ok": False, "error": "char not found"}, status_code=400)
-        max_slots = char.get("_slots_max", [0]*9)
-        mx = max_slots[slot_lvl] if slot_lvl < 9 else 0
+        max_slots = char.get("_slots_max", [0] * 9)
+        mx        = max_slots[slot_lvl] if slot_lvl < 9 else 0
 
-        current = slots_map.get(cname, [0]*9)
-        new_used = max(0, min(mx, current[slot_lvl] + delta))
-        current[slot_lvl] = new_used
-        slots_map[cname] = current
+        current              = sess.spell_slots_used.get(cname, [0] * 9)
+        new_used             = max(0, min(mx, current[slot_lvl] + delta))
+        current[slot_lvl]    = new_used
+        sess.spell_slots_used[cname] = current
 
         logger.info(f"Slot utilisé: {cname} niv{slot_lvl+1} → {new_used}/{mx}")
         return JSONResponse({"ok": True, "used": new_used, "max": mx, "available": mx - new_used})
@@ -896,10 +969,7 @@ async def use_spell_slot(request: Request):
 @app.post("/reset", response_class=RedirectResponse)
 async def reset_conversation(request: Request):
     session_id = get_or_create_session_id(request)
-    CONVERSATIONS.pop(session_id, None)
-    PARTY_STATES.pop(session_id, None)
-    ACTIVE_CHARACTER.pop(session_id, None)
-    SPELL_SLOTS_USED.pop(session_id, None)   # P2c : reset des emplacements
+    SESSIONS.pop(session_id, None)
     logger.info(f"Session reset: {session_id[:8]}")
     return RedirectResponse(url="/", status_code=303)
 
@@ -908,8 +978,7 @@ async def reset_conversation(request: Request):
 async def health_check():
     ollama_status = "DOWN"
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(f"{OLLAMA_URL}/api/tags")
+        resp = await _ollama_client.get("/api/tags", timeout=5.0)
         ollama_status = "OK" if resp.status_code == 200 else "KO"
     except Exception:
         pass
@@ -920,8 +989,8 @@ async def health_check():
         "piper_bin_ok":     PIPER_BIN.exists(),
         "piper_model_ok":   (VOICES_DIR / DEFAULT_VOICE).exists(),
         "voices_available": sorted(p.name for p in VOICES_DIR.glob("*.onnx")),
-        "active_sessions":  len(CONVERSATIONS),
-        "active_parties":   len(PARTY_STATES),
+        "active_sessions":  len(SESSIONS),
+        "active_parties":   sum(1 for s in SESSIONS.values() if s.party),
         "monsters_loaded":  len(MONSTERS_DB),
         "spells_loaded":    bool(SPELLS_DB),
     }
