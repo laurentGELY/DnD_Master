@@ -92,7 +92,7 @@ PIPER_ENV: dict = {
 MONSTERS_PATH = BASE_DIR / "data" / "monsters.json"
 SPELLS_PATH   = BASE_DIR / "data" / "spells.json"
 
-MAX_HISTORY_TURNS   = 15
+MAX_HISTORY_TURNS   = 50
 MAX_USER_INPUT_LEN  = 2000
 SESSION_TTL_SECONDS = 3 * 3600   # sessions inactives > 3h supprimées automatiquement
 
