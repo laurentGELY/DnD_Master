@@ -70,7 +70,7 @@ from fastapi.templating import Jinja2Templates
 CODE_VERSION = "1.7.0"
 
 OLLAMA_URL   = os.getenv("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "dnd-dm-8b")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "dnd-dm-magistral")
 
 BASE_DIR           = Path(__file__).parent
 SYSTEM_PROMPT_PATH = BASE_DIR / "prompts" / "system_prompt.txt"
