@@ -1,0 +1,13 @@
+FROM magistral:24b
+
+# P6000 24GB — on peut se permettre un contexte large
+PARAMETER num_ctx 40000
+
+# Recommandation officielle Mistral : ne pas dépasser 40k (dégradation au-delà)
+PARAMETER num_gpu -1
+
+# Température légèrement plus élevée pour la narration créative
+PARAMETER temperature 0.72
+
+PARAMETER top_p 0.95
+PARAMETER repeat_last_n 256
