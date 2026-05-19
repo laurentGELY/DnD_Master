@@ -836,6 +836,18 @@ async def _cleanup_sessions() -> None:
             logger.info(f"{len(expired)} session(s) expirées supprimées — {len(SESSIONS)} actives")
 
 
+async def _prewarm_model() -> None:
+    try:
+        await _ollama_client.post(
+            "/api/generate",
+            json={"model": OLLAMA_MODEL, "prompt": "", "keep_alive": OLLAMA_KEEP_ALIVE},
+            timeout=httpx.Timeout(connect=5.0, read=60.0, write=5.0, pool=5.0),
+        )
+        logger.info(f"Modèle {OLLAMA_MODEL} pré-chargé en mémoire GPU")
+    except Exception:
+        logger.warning("Pré-chargement Ollama échoué — le modèle sera chargé à la première requête")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _ollama_client
@@ -844,15 +856,9 @@ async def lifespan(app: FastAPI):
         timeout=httpx.Timeout(connect=5.0, read=120.0, write=10.0, pool=5.0),
         limits=httpx.Limits(max_connections=5, max_keepalive_connections=2),
     )
-    try:
-        await _ollama_client.post(
-            "/api/generate",
-            json={"model": OLLAMA_MODEL, "prompt": "", "keep_alive": "10m"},
-            timeout=httpx.Timeout(connect=5.0, read=60.0, write=5.0, pool=5.0),
-        )
-        logger.info(f"Modèle {OLLAMA_MODEL} pré-chargé en mémoire GPU")
-    except Exception:
-        logger.warning("Pré-chargement Ollama échoué — le modèle sera chargé à la première requête")
+    # Préchauffage en arrière-plan : l'app répond immédiatement,
+    # le modèle se charge en VRAM pendant que la page s'affiche.
+    asyncio.create_task(_prewarm_model())
     cleanup_task = asyncio.create_task(_cleanup_sessions())
     yield
     cleanup_task.cancel()
