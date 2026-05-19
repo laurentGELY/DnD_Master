@@ -62,7 +62,7 @@ import re
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import AsyncGenerator, Dict, List, Optional
 
 import yaml
 
@@ -95,8 +95,9 @@ _CFG = _load_config()
 
 CODE_VERSION        = _CFG.get("app",               {}).get("version",          "0.0.0")
 
-OLLAMA_URL   = os.getenv("OLLAMA_URL",   _CFG.get("ollama", {}).get("url",   "http://localhost:11434"))
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", _CFG.get("ollama", {}).get("model", "dnd-dm-magistral"))
+OLLAMA_URL        = os.getenv("OLLAMA_URL",   _CFG.get("ollama", {}).get("url",        "http://localhost:11434"))
+OLLAMA_MODEL      = os.getenv("OLLAMA_MODEL", _CFG.get("ollama", {}).get("model",      "dnd-dm-magistral"))
+OLLAMA_KEEP_ALIVE =                           _CFG.get("ollama", {}).get("keep_alive", "30m")
 
 DEFAULT_VOICE       = _CFG.get("tts",                {}).get("default_voice",      "fr_FR-gilles-low.onnx")
 
@@ -664,15 +665,22 @@ def build_messages(
         5. Historique récent (fenêtre glissante MAX_HISTORY_TURNS)
         6. Input actuel du joueur
     """
+    # System prompt first — static, never changes → Ollama can cache this prefix across turns.
     messages: List[Dict[str, str]] = [
         {"role": "system", "content": get_system_prompt()}
     ]
 
+    # History second — stable prefix (old entries never mutate, only new ones appended).
+    # Keeping history here maximises KV-cache reuse: the cache covers system + all prior turns.
+    # ×2 because each "turn" is two messages: one user + one assistant.
+    recent = history[-(MAX_HISTORY_TURNS * 2):]
+    messages.extend(recent)
+
+    # Dynamic context last — changes every turn (HP, slots, monsters).
+    # Injected right before the user message so the model reads fresh state.
+    # Placing it here prevents it from invalidating the cached static prefix.
     if party:
-        messages.append({
-            "role":    "system",
-            "content": build_party_context(party, active_idx)
-        })
+        messages.append({"role": "system", "content": build_party_context(party, active_idx)})
 
     if session_id:
         slots_ctx = build_slots_context(session_id)
@@ -684,9 +692,6 @@ def build_messages(
         if monsters_ctx:
             messages.append({"role": "system", "content": monsters_ctx})
 
-    # ×2 because each "turn" is two messages: one user + one assistant.
-    recent = history[-(MAX_HISTORY_TURNS * 2):]
-    messages.extend(recent)
     messages.append({"role": "user", "content": user_input})
 
     ctx_chars = sum(len(m["content"]) for m in messages)
@@ -723,7 +728,8 @@ async def call_ollama(messages: List[Dict[str, str]]) -> tuple[str, int, int]:
         t0   = time.perf_counter()
         resp = await _ollama_client.post(
             "/api/chat",
-            json={"model": OLLAMA_MODEL, "messages": messages, "stream": False},
+            json={"model": OLLAMA_MODEL, "messages": messages, "stream": False,
+                  "keep_alive": OLLAMA_KEEP_ALIVE},
         )
         resp.raise_for_status()
         elapsed         = time.perf_counter() - t0
@@ -1071,6 +1077,113 @@ async def send_message(request: Request, user_input: str = Form(...)):
 
     logger.info(f"[PERF] /send total: {time.perf_counter() - t0_request:.1f}s — session {session_id[:8]}")
     return RedirectResponse(url="/", status_code=303)
+
+
+@app.post("/send_stream")
+async def send_message_stream(request: Request, user_input: str = Form(...)):
+    """
+    Variante streaming de /send : retourne les tokens Ollama en SSE au fur et à mesure.
+    Le JS intercepte le submit du formulaire et appelle cet endpoint.
+    L'état de session est mis à jour côté serveur à la fin du stream.
+    En cas d'erreur, renvoie un événement SSE {"error": "..."} sans polluer l'historique.
+    """
+    if len(user_input) > MAX_USER_INPUT_LEN:
+        user_input = user_input[:MAX_USER_INPUT_LEN]
+
+    session_id     = get_or_create_session_id(request)
+    sess           = get_session(session_id)
+    original_input = user_input
+
+    detected_party = extract_party_from_input(user_input)
+    if detected_party:
+        sess.party            = detected_party
+        sess.active_character = 0
+        init_spell_slots_for_party(session_id)
+        logger.info(f"Groupe chargé (stream): {[char_name(c) for c in detected_party]} — {session_id[:8]}")
+
+    rest_type = detect_rest_command(user_input)
+    if rest_type:
+        rest_msg   = apply_rest(session_id, rest_type)
+        user_input = user_input + "\n[Systeme: " + rest_msg + "]"
+
+    recent_dm       = [m["content"] for m in sess.conversations[-4:] if m["role"] == "assistant"]
+    combat_monsters = []
+    for dm_text in recent_dm:
+        combat_monsters.extend(detect_monsters_in_text(dm_text))
+    combat_monsters = list({m["key"]: m for m in combat_monsters}.values())
+
+    messages = build_messages(
+        sess.conversations, user_input, sess.party, sess.active_character,
+        session_id=session_id,
+        combat_monsters=combat_monsters if combat_monsters else None,
+    )
+
+    async def event_stream() -> AsyncGenerator[str, None]:
+        accumulated: list[str] = []
+        try:
+            async with _ollama_client.stream(
+                "POST", "/api/chat",
+                json={"model": OLLAMA_MODEL, "messages": messages, "stream": True,
+                      "keep_alive": OLLAMA_KEEP_ALIVE},
+            ) as response:
+                response.raise_for_status()
+                async for raw_line in response.aiter_lines():
+                    if not raw_line:
+                        continue
+                    try:
+                        chunk = json.loads(raw_line)
+                    except json.JSONDecodeError:
+                        continue
+                    token = chunk.get("message", {}).get("content", "")
+                    if token:
+                        accumulated.append(token)
+                        yield f"data: {json.dumps({'token': token})}\n\n"
+                    if chunk.get("done"):
+                        prompt_t   = chunk.get("prompt_eval_count", 0)
+                        response_t = chunk.get("eval_count", 0)
+                        elapsed    = chunk.get("total_duration", 0) / 1e9
+                        tps        = response_t / elapsed if elapsed > 0 else 0
+                        logger.info(
+                            f"[PERF] Ollama stream: {elapsed:.1f}s | "
+                            f"prompt={prompt_t}t réponse={response_t}t ({tps:.1f} t/s)"
+                        )
+                        complete   = strip_markdown("".join(accumulated))
+                        reply_clean = re.sub(r'\[COMBAT:[^\]]*\]', '', complete).strip()
+                        sess.conversations.append({"role": "user",      "content": user_input})
+                        sess.conversations.append({"role": "assistant", "content": reply_clean})
+                        sess.last_error        = None
+                        sess.last_failed_input = None
+                        advance_active_character(session_id)
+                        logger.info(f"Tour ajouté (stream) — session {session_id[:8]}, {len(sess.conversations)} msgs")
+                        asyncio.create_task(maybe_compact_history(session_id))
+                        yield f"data: {json.dumps({'done': True, 'active_idx': sess.active_character})}\n\n"
+        except httpx.ConnectError:
+            err = "Ollama non démarré — lancez 'ollama serve'"
+            sess.last_error = err
+            sess.last_failed_input = original_input
+            logger.error(f"Ollama stream ConnectError — {session_id[:8]}")
+            yield f"data: {json.dumps({'error': err})}\n\n"
+        except httpx.TimeoutException:
+            err = "Délai dépassé — Ollama trop lent ou contexte trop long"
+            sess.last_error = err
+            sess.last_failed_input = original_input
+            logger.error(f"Ollama stream timeout — {session_id[:8]}")
+            yield f"data: {json.dumps({'error': err})}\n\n"
+        except Exception as e:
+            err = f"{type(e).__name__} — {str(e) or '(aucun détail)'}"
+            sess.last_error = err
+            sess.last_failed_input = original_input
+            logger.error(f"Ollama stream erreur ({session_id[:8]}): {err}")
+            yield f"data: {json.dumps({'error': err})}\n\n"
+
+    resp = StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+    if "session_id" not in request.cookies:
+        resp.set_cookie("session_id", session_id, httponly=True)
+    return resp
 
 
 @app.get("/party/active")

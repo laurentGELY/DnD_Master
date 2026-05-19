@@ -339,6 +339,23 @@
         }
         .btn-rest:hover { border-color: #6b8cba; color: #6b8cba; }
 
+        /* ── Indicateur de frappe (streaming) ── */
+        .typing-indicator {
+            display: inline-flex; gap: 4px; align-items: center;
+            padding: 2px 0;
+        }
+        .typing-indicator span {
+            width: 5px; height: 5px; border-radius: 50%;
+            background: #c9a96e; opacity: 0.4;
+            animation: typing-bounce 1.2s infinite ease-in-out;
+        }
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typing-bounce {
+            0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+            40%            { transform: translateY(-4px); opacity: 1; }
+        }
+
         /* ── Bannière d'erreur ── */
         .error-banner {
             flex-shrink: 0;
@@ -586,22 +603,8 @@
 </div>
 
 <script>
-    // ── Retry après erreur Ollama ─────────────────────────────────────────────
-    const lastFailedInput = {{ (last_failed_input | tojson) if last_failed_input else 'null' }};
-
-    function retryLastInput() {
-        if (!lastFailedInput) return;
-        const ta   = document.getElementById('msg-input');
-        const form = ta.closest('form');
-        ta.value   = lastFailedInput;
-        form.submit();
-    }
-
     // ── État JS local ──────────────────────────────────────────────────────────
-    // active_idx est injecté par Jinja2 — synchronisé avec le serveur au chargement.
     let activeIdx = {{ active_idx if active_idx is not none else 'null' }};
-
-    // Noms des personnages pour le préfixage automatique du textarea
     const charNames = [
         {% if party %}
             {% for char in party %}
@@ -609,13 +612,9 @@
             {% endfor %}
         {% endif %}
     ];
-
-    // ── Auto-scroll — positionne sur le début du dernier message ─────────────
-    // On cherche le dernier .msg dans le chat et on scrolle jusqu'à lui,
-    // de sorte que son début soit visible en haut de la zone de chat.
-    // scrollIntoView({ block: 'start' }) garantit que le haut du message
-    // est aligné avec le haut de la zone scrollable, pas coupé.
     const chat = document.getElementById('chat-history');
+
+    // ── Auto-scroll au chargement ─────────────────────────────────────────────
     const allMsgs = chat.querySelectorAll('.msg');
     if (allMsgs.length) {
         allMsgs[allMsgs.length - 1].scrollIntoView({ block: 'start', behavior: 'instant' });
@@ -623,121 +622,202 @@
         chat.scrollTop = 0;
     }
 
-    // ── Préfixage du textarea avec le nom du personnage actif ─────────────────
-    function prefixTextarea(name) {
-        const ta      = document.getElementById('msg-input');
-        const prefix  = name + ' : ';
-        // Si le textarea est vide ou contient déjà un préfixe de personnage,
-        // le remplacer. Sinon ajouter devant le texte existant.
-        const existing = ta.value;
-        const prefixMatch = existing.match(/^([^:]+) : /);
-        if (!existing || prefixMatch) {
-            ta.value = prefix;
-        } else {
-            ta.value = prefix + existing;
+    // ── Helpers UI ────────────────────────────────────────────────────────────
+    function escapeHtml(t) {
+        return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function addMessageToChat(role, roleHtml, textHtml) {
+        const empty = chat.querySelector('.empty-state');
+        if (empty) empty.remove();
+        if (chat.children.length > 0) {
+            const d = document.createElement('div');
+            d.className = 'divider';
+            chat.appendChild(d);
         }
+        const el = document.createElement('div');
+        el.className = `msg ${role === 'player' ? 'player' : 'dm'} ${role === 'dm' ? 'dm-msg' : ''}`;
+        el.innerHTML = `<div class="msg-role">${roleHtml}</div><div class="msg-text">${textHtml}</div>`;
+        chat.appendChild(el);
+        return el;
+    }
+
+    function showErrorBanner(errorMsg, failedInput) {
+        document.querySelector('.error-banner')?.remove();
+        const colChat     = document.querySelector('.col-chat');
+        const inputSection = colChat.querySelector('.input-section');
+        const banner = document.createElement('div');
+        banner.className = 'error-banner';
+        banner.innerHTML = `
+            <span class="error-icon">⚠</span>
+            <div class="error-body">
+                <div class="error-title">Erreur Ollama</div>
+                <div class="error-msg">${escapeHtml(errorMsg)}</div>
+            </div>
+            <button class="btn-retry" onclick="retryWithInput(${JSON.stringify(failedInput)})">↺ Retenter</button>`;
+        colChat.insertBefore(banner, inputSection);
+    }
+
+    // Retry depuis une bannière serveur (page rechargée après erreur)
+    const lastFailedInput = {{ (last_failed_input | tojson) if last_failed_input else 'null' }};
+    function retryLastInput() {
+        if (lastFailedInput) retryWithInput(lastFailedInput);
+    }
+    function retryWithInput(text) {
+        document.querySelector('.error-banner')?.remove();
+        submitStreaming(text);
+    }
+
+    // ── Streaming submit ──────────────────────────────────────────────────────
+    async function submitStreaming(userText) {
+        const btnSend = document.querySelector('.btn-send');
+        btnSend.disabled = true;
+        btnSend.textContent = '…';
+        document.querySelector('.error-banner')?.remove();
+
+        addMessageToChat('player', 'Joueur', escapeHtml(userText).replace(/\n/g,'<br>'));
+
+        const dmTurnNum = document.querySelectorAll('.msg.dm').length + 1;
+        const dmEl  = addMessageToChat('dm',
+            `Dungeon Master <span class="turn-num">#${dmTurnNum}</span>`,
+            '<span class="typing-indicator"><span></span><span></span><span></span></span>');
+        const textEl = dmEl.querySelector('.msg-text');
+        dmEl.scrollIntoView({ block: 'start', behavior: 'smooth' });
+
+        const fd = new FormData();
+        fd.append('user_input', userText);
+        let fullText = '', firstToken = true;
+
+        try {
+            const resp = await fetch('/send_stream', { method: 'POST', body: fd });
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+            const reader  = resp.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    let data;
+                    try { data = JSON.parse(line.slice(6)); } catch { continue; }
+
+                    if (data.token) {
+                        if (firstToken) { textEl.innerHTML = ''; firstToken = false; }
+                        fullText += data.token;
+                        textEl.innerHTML = escapeHtml(fullText).replace(/\n/g,'<br>');
+                        dmEl.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+                    }
+                    if (data.done) {
+                        if (data.active_idx != null) {
+                            updateActiveUI(data.active_idx);
+                            if (charNames[data.active_idx]) prefixTextarea(charNames[data.active_idx]);
+                        }
+                        setTimeout(() => readLastDmMessage(document.getElementById('tts-btn')), 400);
+                    }
+                    if (data.error) {
+                        dmEl.previousElementSibling?.classList.contains('divider') && dmEl.previousElementSibling.remove();
+                        dmEl.remove();
+                        showErrorBanner(data.error, userText);
+                    }
+                }
+            }
+        } catch (err) {
+            if (dmEl.parentNode) {
+                dmEl.previousElementSibling?.classList.contains('divider') && dmEl.previousElementSibling.remove();
+                dmEl.remove();
+            }
+            showErrorBanner(err.message || 'Erreur réseau', userText);
+        } finally {
+            btnSend.disabled = false;
+            btnSend.textContent = '⚔ Envoyer';
+        }
+    }
+
+    // Intercepter le submit du formulaire
+    document.querySelector('form[action="/send"]').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const ta   = document.getElementById('msg-input');
+        const text = ta.value.trim();
+        if (!text) return;
+        ta.value = '';
+        submitStreaming(text);
+    });
+
+    // ── Préfixage du textarea ─────────────────────────────────────────────────
+    function prefixTextarea(name) {
+        const ta    = document.getElementById('msg-input');
+        const prefix = name + ' : ';
+        const m = ta.value.match(/^([^:]+) : /);
+        if (!ta.value || m) { ta.value = prefix; }
+        else { ta.value = prefix + ta.value; }
         ta.focus();
         ta.setSelectionRange(ta.value.length, ta.value.length);
     }
 
-    // ── Sélection d'un personnage actif ───────────────────────────────────────
-    // Appelé soit par un clic sur btn-char, soit par un clic sur une char-card.
+    // ── Sélection du personnage actif ─────────────────────────────────────────
     function selectChar(idx, name) {
-        if (idx === activeIdx) return;   // Déjà actif — rien à faire
-
-        // Mise à jour visuelle immédiate (sans attendre la réponse serveur)
+        if (idx === activeIdx) return;
         updateActiveUI(idx);
-
-        // Persistance côté serveur via AJAX
         fetch('/party/active', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ index: idx }),
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (!data.ok) {
-                console.warn('Erreur set active character');
-            }
-        })
-        .catch(e => console.error('Set active error:', e));
-
-        // Préfixe le textarea avec le nom du nouveau personnage actif
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ index: idx }),
+        }).catch(e => console.error('Set active error:', e));
         prefixTextarea(name);
     }
 
-    // ── Mise à jour de l'UI après changement de personnage actif ─────────────
     function updateActiveUI(idx) {
         activeIdx = idx;
-
-        // Boutons de la barre de sélection
-        document.querySelectorAll('.btn-char').forEach((btn, i) => {
-            btn.classList.toggle('active', i === idx);
-        });
-
-        // Cartes du panneau groupe
-        document.querySelectorAll('.char-card').forEach((card, i) => {
-            card.classList.toggle('active-card', i === idx);
-        });
-
-        // Placeholder du textarea
+        document.querySelectorAll('.btn-char').forEach((b, i) => b.classList.toggle('active', i === idx));
+        document.querySelectorAll('.char-card').forEach((c, i) => c.classList.toggle('active-card', i === idx));
         const ta = document.getElementById('msg-input');
-        if (charNames[idx]) {
-            ta.placeholder = charNames[idx] + ' : votre action…';
-        }
+        if (charNames[idx]) ta.placeholder = charNames[idx] + ' : votre action…';
     }
 
-    // ── Préfixage initial au chargement de la page ────────────────────────────
-    // Si un personnage est actif et le textarea est vide, préfixer automatiquement.
+    // Préfixage initial
     if (activeIdx !== null && charNames[activeIdx]) {
         const ta = document.getElementById('msg-input');
-        if (!ta.value) {
-            ta.value = charNames[activeIdx] + ' : ';
-        }
+        if (!ta.value) ta.value = charNames[activeIdx] + ' : ';
     }
 
-    // ── Lanceur de dés ─────────────────────────────────────────────────────────
+    // ── Lanceur de dés ────────────────────────────────────────────────────────
     function rollDie(faces) {
-        const result   = Math.floor(Math.random() * faces) + 1;
-        const label    = `[d${faces}: ${result}]`;
-        const ta       = document.getElementById('msg-input');
-        const sep      = ta.value.trim() ? ' ' : '';
-        ta.value      += sep + label;
+        const result = Math.floor(Math.random() * faces) + 1;
+        const label  = `[d${faces}: ${result}]`;
+        const ta     = document.getElementById('msg-input');
+        ta.value    += (ta.value.trim() ? ' ' : '') + label;
         ta.focus();
         ta.setSelectionRange(ta.value.length, ta.value.length);
-
-        const resultEl = document.getElementById('dice-result');
-        resultEl.textContent = label;
-        resultEl.classList.add('visible');
+        const el = document.getElementById('dice-result');
+        el.textContent = label;
+        el.classList.add('visible');
         clearTimeout(window._diceTimeout);
-        window._diceTimeout = setTimeout(() => resultEl.classList.remove('visible'), 3000);
+        window._diceTimeout = setTimeout(() => el.classList.remove('visible'), 3000);
     }
 
-    // ── Mise à jour HP (AJAX) ──────────────────────────────────────────────────
+    // ── Mise à jour HP (AJAX) ─────────────────────────────────────────────────
     function updateHP(input) {
-        const idx  = parseInt(input.dataset.index);
-        const hp   = parseInt(input.value);
-        const max  = parseInt(input.dataset.max);
-
+        const idx = parseInt(input.dataset.index);
+        const hp  = parseInt(input.value);
+        const max = parseInt(input.dataset.max);
         input.classList.remove('hp-high', 'hp-medium', 'hp-low');
         const ratio = max > 0 ? hp / max : 1;
         if      (ratio > 0.5)  input.classList.add('hp-high');
         else if (ratio > 0.25) input.classList.add('hp-medium');
         else                   input.classList.add('hp-low');
-
         fetch('/party/hp', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ index: idx, hp: hp }),
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ index: idx, hp: hp }),
         }).catch(e => console.error('HP update error:', e));
     }
+    document.querySelectorAll('.hp-input').forEach(input => { if (input.value) updateHP(input); });
 
-    // Couleurs HP initiales au chargement
-    document.querySelectorAll('.hp-input').forEach(input => {
-        if (input.value) updateHP(input);
-    });
-
-    // ── Sélecteur de voix — peuplé depuis /voices ────────────────────────────
+    // ── Sélecteur de voix ─────────────────────────────────────────────────────
     (async function initVoiceSelect() {
         const sel = document.getElementById('voice-select');
         try {
@@ -750,52 +830,26 @@
                 opt.selected = (v === saved);
                 sel.appendChild(opt);
             });
-        } catch(e) {
-            // Fallback silencieux si /voices échoue
+        } catch {
             const opt = document.createElement('option');
-            opt.value = 'fr_FR-gilles-low.onnx';
-            opt.text  = 'gilles-low';
+            opt.value = 'fr_FR-gilles-low.onnx'; opt.text = 'gilles-low';
             sel.appendChild(opt);
         }
         sel.onchange = () => localStorage.setItem('tts-voice', sel.value);
     })();
 
-    // ── TTS — lecture automatique + segmentée ────────────────────────────────
-    //
-    // Amélioration 1 : le texte reçu est déjà nettoyé du Markdown côté serveur.
-    // Amélioration 3 : le texte est découpé en segments sur les frontières de
-    //   phrases (. ! ?) pour ne jamais couper une phrase en deux.
-    //   Chaque segment est envoyé séparément à /tts et les WAV sont joués
-    //   en séquence — le suivant démarre dès que le précédent se termine.
-    //
-    // Déclenchement : automatique dès que la page charge avec un nouveau
-    //   message DM (détecté via un flag data-tts-pending sur le dernier .dm-msg).
-    //   Le bouton 🎤 Voix reste disponible pour relire manuellement.
+    // ── TTS segmenté ──────────────────────────────────────────────────────────
+    const TTS_SEGMENT_MAX = 550;
 
-    const TTS_SEGMENT_MAX = 550;  // Caractères max par segment (marge sous 600)
-
-    /**
-     * Découpe un texte en segments ne dépassant pas maxLen caractères,
-     * en coupant uniquement sur les fins de phrases (. ! ? : ;) ou à défaut
-     * sur les espaces. Évite de couper les abréviations courantes (M. Mme. etc).
-     */
     function splitIntoSegments(text, maxLen) {
         const segments = [];
         let remaining  = text.trim();
-
         while (remaining.length > maxLen) {
-            // Cherche la dernière fin de phrase dans la fenêtre maxLen
-            const window = remaining.slice(0, maxLen);
-            // Regex : fin de phrase suivie d'un espace ou fin de chaîne
-            const match  = window.match(/^(.*[.!?])\s+\S/s);
+            const win   = remaining.slice(0, maxLen);
+            const match = win.match(/^(.*[.!?])\s+\S/s);
             let cutAt;
-            if (match) {
-                cutAt = match[1].length;
-            } else {
-                // Pas de fin de phrase — coupe sur le dernier espace
-                const lastSpace = window.lastIndexOf(' ');
-                cutAt = lastSpace > 0 ? lastSpace : maxLen;
-            }
+            if (match) { cutAt = match[1].length; }
+            else { const ls = win.lastIndexOf(' '); cutAt = ls > 0 ? ls : maxLen; }
             segments.push(remaining.slice(0, cutAt).trim());
             remaining = remaining.slice(cutAt).trim();
         }
@@ -803,113 +857,61 @@
         return segments.filter(s => s.length > 0);
     }
 
-    /** Joue une liste de segments audio en séquence via /tts. */
     async function playSegments(segments, btn) {
         for (let i = 0; i < segments.length; i++) {
-            const seg = segments[i];
-            // Indicateur de progression dans le bouton
-            if (btn) {
-                btn.textContent = segments.length > 1
-                    ? `⏸ ${i + 1}/${segments.length}…`
-                    : '⏸ Lecture…';
-            }
+            if (btn) btn.textContent = segments.length > 1 ? `⏸ ${i+1}/${segments.length}…` : '⏸ Lecture…';
             await new Promise((resolve, reject) => {
                 const voice = document.getElementById('voice-select').value;
-                const url   = '/tts?text=' + encodeURIComponent(seg)
-                            + '&voice='    + encodeURIComponent(voice);
+                const url   = '/tts?text=' + encodeURIComponent(segments[i]) + '&voice=' + encodeURIComponent(voice);
                 const audio = new Audio(url);
-                audio.onended = resolve;
-                audio.onerror = reject;
+                audio.onended = resolve; audio.onerror = reject;
                 audio.play().catch(reject);
             });
         }
     }
 
-    /** Point d'entrée TTS : extrait le texte du dernier message DM et le lit. */
     async function readLastDmMessage(btn) {
         const dmBlocks = chat.querySelectorAll('.dm-msg .msg-text');
         if (!dmBlocks.length) return;
-        // innerText respecte les <br> comme sauts de ligne
-        const rawText  = dmBlocks[dmBlocks.length - 1].innerText.trim();
+        const rawText = dmBlocks[dmBlocks.length - 1].innerText.trim();
         if (!rawText) return;
-
         const segments = splitIntoSegments(rawText, TTS_SEGMENT_MAX);
         if (!segments.length) return;
-
-        if (btn) {
-            btn.classList.add('playing');
-            btn.textContent = '⏸ Lecture…';
-        }
-        try {
-            await playSegments(segments, btn);
-        } catch(e) {
-            console.error('TTS erreur:', e);
-        } finally {
-            if (btn) {
-                btn.classList.remove('playing');
-                btn.textContent = '🎤 Voix';
-            }
-        }
+        if (btn) { btn.classList.add('playing'); btn.textContent = '⏸ Lecture…'; }
+        try { await playSegments(segments, btn); }
+        catch(e) { console.error('TTS erreur:', e); }
+        finally { if (btn) { btn.classList.remove('playing'); btn.textContent = '🎤 Voix'; } }
     }
 
-    // Bouton manuel — relecture à la demande
-    document.getElementById('tts-btn').onclick = function() {
-        readLastDmMessage(this);
-    };
+    document.getElementById('tts-btn').onclick = function() { readLastDmMessage(this); };
 
-    // Lecture automatique si la page vient d'être rechargée après un message DM
-    // Le dernier message DM reçoit l'attribut data-tts-auto="1" via Jinja2
-    // (voir template) pour signaler qu'il doit être lu automatiquement.
+    // Lecture auto au chargement (cas rechargement de page)
     const autoTarget = chat.querySelector('.dm-msg[data-tts-auto="1"]');
-    if (autoTarget) {
-        // Petit délai pour laisser le navigateur finir le rendu
-        setTimeout(() => readLastDmMessage(document.getElementById('tts-btn')), 400);
-    }
+    if (autoTarget) setTimeout(() => readLastDmMessage(document.getElementById('tts-btn')), 400);
 
-    // ── Spell slot toggle — P2c ───────────────────────────────────────────────
-    // Bascule un emplacement entre utilisé et disponible.
-    // Le pip cliqué détermine le delta : si pip < used → récupère 1, sinon utilise 1
+    // ── Spell slot toggle ─────────────────────────────────────────────────────
     function toggleSlot(charName, slotLevel, pipIndex, currentUsed, maxSlots) {
-        // Si on clique sur un pip déjà "used" → on récupère (delta = -1)
-        // Si on clique sur un pip "available" → on utilise (delta = +1)
         const delta = pipIndex < currentUsed ? -1 : 1;
-
         fetch('/spells/use', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ char_name: charName, slot_level: slotLevel, delta: delta }),
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ char_name: charName, slot_level: slotLevel, delta: delta }),
         })
         .then(r => r.json())
         .then(data => {
-            if (data.ok) {
-                // Mise à jour visuelle des pips sans rechargement
-                const row = document.querySelector(
-                    `.slot-pips[data-char="${charName}"][data-level="${slotLevel}"]`
-                );
-                if (row) {
-                    const pips = row.querySelectorAll('.slot-pip');
-                    pips.forEach((pip, i) => {
-                        pip.classList.toggle('available', i < data.available);
-                        pip.classList.toggle('used',      i >= data.available);
-                        // Met à jour le data-pip et onclick avec les nouvelles valeurs
-                        pip.setAttribute('onclick',
-                            `toggleSlot('${charName}', ${slotLevel}, ${i}, ${data.used}, ${maxSlots})`
-                        );
-                    });
-                }
-            }
+            if (!data.ok) return;
+            const row = document.querySelector(`.slot-pips[data-char="${charName}"][data-level="${slotLevel}"]`);
+            if (!row) return;
+            row.querySelectorAll('.slot-pip').forEach((pip, i) => {
+                pip.classList.toggle('available', i < data.available);
+                pip.classList.toggle('used', i >= data.available);
+                pip.setAttribute('onclick', `toggleSlot('${charName}', ${slotLevel}, ${i}, ${data.used}, ${maxSlots})`);
+            });
         })
         .catch(e => console.error('Slot toggle error:', e));
     }
 
-    // ── Boutons de repos — P2b ────────────────────────────────────────────────
-    // Injecte la commande de repos dans le textarea et soumet le formulaire.
-    function sendRest(command) {
-        const ta   = document.getElementById('msg-input');
-        const form = ta.closest('form');
-        ta.value   = command;
-        form.submit();
-    }
+    // ── Boutons de repos ──────────────────────────────────────────────────────
+    function sendRest(command) { submitStreaming(command); }
 
 </script>
 </body>

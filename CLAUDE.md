@@ -68,6 +68,7 @@ All tuneable parameters live in **`Config.yml`** (YAML, loaded at startup). Edit
 |---|---|---|
 | `ollama.url` | `http://localhost:11434` | Ollama endpoint |
 | `ollama.model` | `dnd-dm-gemma4` | Model name (see Modelfiles) |
+| `ollama.keep_alive` | `30m` | Durée de maintien du modèle en VRAM |
 | `tts.default_voice` | `fr_FR-gilles-low.onnx` | Piper voice |
 | `session.max_history_turns` | `50` | Sliding history window |
 | `session.max_user_input_len` | `2000` | Max chars per player message |
