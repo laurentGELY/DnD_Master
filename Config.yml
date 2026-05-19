@@ -6,7 +6,9 @@ app:
 
 ollama:
   url:   "http://localhost:11434"
-  model: "dnd-dm-magistral"
+  model: "dnd-dm-gemma4"      # Gemma4 26B — recommended primary
+  # model: "dnd-dm-magistral" # Magistral 24B — recommended for combat-heavy sessions
+  # model: "dnd-dm-8b"        # Llama 3.1 8B — fast fallback
 
 tts:
   default_voice: "fr_FR-gilles-low.onnx"

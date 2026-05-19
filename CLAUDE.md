@@ -13,8 +13,12 @@ uvicorn main:app --reload --host 127.0.0.1 --port 8000
 Access at `http://localhost:8000`. Diagnostics at `http://localhost:8000/health`.
 
 **External dependencies that must be running:**
-- **Ollama** (`ollama serve`) with the `dnd-dm-magistral` model loaded (Magistral 24B, `num_ctx 40000`, defined in `Modelfile_Magistral:latest.txt`)
-- Override model: `OLLAMA_MODEL=other-model uvicorn main:app ...`
+- **Ollama** (`ollama serve`) with the desired model loaded. Three Modelfiles are provided:
+  - `Modelfile_dnd-dm-gemma4:latest.txt` — Gemma4 26B, default (`num_ctx 32000`)
+  - `Modelfile_Magistral:latest.txt` — Magistral 24B, combat-heavy sessions (`num_ctx 32000`)
+  - `Modelfile_dnd-dm-8b:latest.txt` — Llama 3.1 8B, fast fallback (`num_ctx 16000`)
+- Active model is set in `Config.yml` under `ollama.model` (two alternatives are commented out)
+- Override for a single run: `OLLAMA_MODEL=other-model uvicorn main:app ...`
 
 **Verify Piper TTS manually:**
 ```bash
@@ -63,7 +67,7 @@ All tuneable parameters live in **`Config.yml`** (YAML, loaded at startup). Edit
 | `Config.yml` key | Default | Effect |
 |---|---|---|
 | `ollama.url` | `http://localhost:11434` | Ollama endpoint |
-| `ollama.model` | `dnd-dm-magistral` | Model name |
+| `ollama.model` | `dnd-dm-gemma4` | Model name (see Modelfiles) |
 | `tts.default_voice` | `fr_FR-gilles-low.onnx` | Piper voice |
 | `session.max_history_turns` | `50` | Sliding history window |
 | `session.max_user_input_len` | `2000` | Max chars per player message |
