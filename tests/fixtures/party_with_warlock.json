@@ -1,0 +1,47 @@
+[
+  {
+    "name": "Bjorn",
+    "race": "Humain",
+    "class": "Rôdeur",
+    "level": 5,
+    "HP": 44,
+    "HP_max": 44,
+    "AC": 15,
+    "STR": 14,
+    "DEX": 17,
+    "CON": 13,
+    "INT": 11,
+    "WIS": 14,
+    "CHA": 10
+  },
+  {
+    "name": "Zara",
+    "race": "Tiefelin",
+    "class": "Occultiste",
+    "level": 5,
+    "HP": 32,
+    "HP_max": 32,
+    "AC": 13,
+    "STR": 9,
+    "DEX": 14,
+    "CON": 12,
+    "INT": 13,
+    "WIS": 12,
+    "CHA": 18
+  },
+  {
+    "name": "Frère Aldric",
+    "race": "Humain",
+    "class": "Clerc",
+    "level": 5,
+    "HP": 38,
+    "HP_max": 38,
+    "AC": 16,
+    "STR": 13,
+    "DEX": 10,
+    "CON": 14,
+    "INT": 12,
+    "WIS": 17,
+    "CHA": 12
+  }
+]

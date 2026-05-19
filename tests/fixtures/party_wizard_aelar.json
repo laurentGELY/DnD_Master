@@ -1,0 +1,22 @@
+[
+  {
+    "name": "Aelar",
+    "race": "Elfe des bois",
+    "class": "Magicien",
+    "level": 1,
+    "hp": 12,
+    "hp_current": 12,
+    "ac": 5,
+    "gold": 20,
+    "copper": 3,
+    "inventory": [
+      "Sac à dos",
+      "Baguette en bois de frêne",
+      "Parchemins divers",
+      "Carte rudimentaire de Valdris"
+    ],
+    "spells_known": ["Lumière"],
+    "conditions": [],
+    "location": "Chambre des Veines — QG de la Guilde des Voleurs de Lune"
+  }
+]

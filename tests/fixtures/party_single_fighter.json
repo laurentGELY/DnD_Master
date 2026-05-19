@@ -1,0 +1,17 @@
+[
+  {
+    "name": "Karim",
+    "race": "Humain",
+    "class": "Paladin",
+    "level": 2,
+    "HP": 22,
+    "HP_max": 22,
+    "AC": 18,
+    "STR": 16,
+    "DEX": 10,
+    "CON": 14,
+    "INT": 10,
+    "WIS": 12,
+    "CHA": 15
+  }
+]

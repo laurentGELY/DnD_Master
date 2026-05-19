@@ -1,0 +1,134 @@
+{
+  "meta": {
+    "session": 1,
+    "date": "2026-02-23",
+    "campaign": "Les Voleurs de Lune",
+    "system": "D&D 5e"
+  },
+  "party": {
+    "name": "Aelar",
+    "race": "Elfe des bois",
+    "class": "Magicien",
+    "level": 1,
+    "hp": 12,
+    "hp_current": 12,
+    "ac": 5,
+    "gold": 20,
+    "copper": 3,
+    "inventory": [
+      "Sac à dos",
+      "Baguette en bois de frêne",
+      "Parchemins divers",
+      "Carte rudimentaire de Valdris"
+    ],
+    "spells_known": ["Lumière"],
+    "conditions": [],
+    "location": "Chambre des Veines — QG de la Guilde des Voleurs de Lune"
+  },
+  "world_state": {
+    "city": "Valdris",
+    "weather": "Pluie fine, bruine froide",
+    "time": "Nuit — fin de session 1",
+    "districts_known": [
+      "Quartier sud — entrée de la ville",
+      "Grand Marché de Valdris",
+      "Quartier des Cendres",
+      "Les Veines — tunnels souterrains de la Guilde"
+    ]
+  },
+  "factions": [
+    {
+      "name": "Guilde des Voleurs de Lune",
+      "status": "Allié — membre recruté",
+      "reputation": "Neutre/positif",
+      "notes": "Aelar vient d'être officiellement recruté par Valdren"
+    },
+    {
+      "name": "Gardes de Valdris",
+      "status": "Hostile",
+      "reputation": "Suspect — accusé du vol de la Gemme de Lune",
+      "notes": "Les gardes ont vu Aelar fuir le marché"
+    }
+  ],
+  "npcs": [
+    {
+      "name": "Valdren",
+      "role": "Chef de la Guilde des Voleurs de Lune",
+      "description": "Homme d'une cinquantaine d'années, cheveux gris, regard froid et calme",
+      "goal": "Protéger la Guilde et neutraliser Draven avant d'être exposé",
+      "fear": "Être livré aux autorités pour le meurtre commis il y a 12 ans",
+      "secret": "A tué un marchand exploiteur d'enfants il y a 12 ans. Témoin : Vara Zinn.",
+      "status": "Vivant — au QG des Veines",
+      "relation_to_player": "Employeur, méfiant mais impressionné par l'honnêteté d'Aelar"
+    },
+    {
+      "name": "Zara",
+      "role": "Membre confirmée de la Guilde",
+      "description": "Jeune humaine, capuche relevée, souriante, habile pickpocket",
+      "goal": "Monter en grade dans la Guilde",
+      "fear": "Inconnue",
+      "secret": "A volé la Gemme de Lune pour tester Aelar sur ordre de Valdren",
+      "status": "Vivante — au QG des Veines",
+      "relation_to_player": "Alliée, complice de recrutement"
+    },
+    {
+      "name": "Draven",
+      "role": "Ancien membre traître de la Guilde",
+      "description": "Grand, maigre, cicatrice sur le sourcil gauche, la quarantaine",
+      "goal": "Livrer Valdren aux autorités par vengeance personnelle",
+      "fear": "Être retrouvé par la Guilde",
+      "secret": "Travaille pour Vara Zinn — pas pour de l'argent mais par vengeance contre Valdren qui lui a refusé le commandement",
+      "status": "Vivant — en fuite dans Valdris, sait que son sac a été volé",
+      "relation_to_player": "Ennemi actif"
+    },
+    {
+      "name": "Vara Zinn",
+      "role": "Témoin du meurtre commis par Valdren il y a 12 ans",
+      "description": "Ancienne servante, identité visuelle inconnue",
+      "goal": "Exposer Valdren et le faire pendre",
+      "fear": "Inconnue",
+      "secret": "Crue morte pendant 12 ans — est en réalité vivante et orchestre la chute de Valdren",
+      "status": "Vivante — localisation inconnue dans Valdris",
+      "relation_to_player": "Antagoniste potentielle"
+    },
+    {
+      "name": "Borwick",
+      "role": "Marchand du Grand Marché",
+      "description": "Petit, chauve, yeux en bouton de bottine, irascible",
+      "goal": "Récupérer sa Gemme de Lune",
+      "fear": "Inconnue",
+      "secret": "Inconnue",
+      "status": "Vivant — Grand Marché",
+      "relation_to_player": "Hostile — a accusé Aelar publiquement"
+    }
+  ],
+  "active_quests": [
+    {
+      "title": "Localiser Vara Zinn",
+      "description": "Valdren veut retrouver Vara Zinn avant que Draven ne disparaisse définitivement",
+      "status": "Active — début session 2",
+      "reward": "À négocier"
+    },
+    {
+      "title": "Neutraliser Draven",
+      "description": "Draven sait que son sac a été volé et représente une menace active",
+      "status": "Active",
+      "reward": "À négocier"
+    }
+  ],
+  "open_threads": [
+    "Borwick et la Gemme de Lune — Aelar est toujours suspect aux yeux des gardes",
+    "Le parchemin de chantage — vingtaine de noms compromettants à Valdris",
+    "Identité et localisation de Vara Zinn",
+    "Draven en fuite — sait qu'il a été suivi et volé"
+  ],
+  "recent_session_summary": "Aelar arrive à Valdris sans argent et est faussement accusé du vol de la Gemme de Lune par le marchand Borwick. Il fuit dans les ruelles et rencontre Zara, membre de la Guilde des Voleurs de Lune, qui l'entraîne au QG souterrain. Valdren lui confie une mission : récupérer un parchemin volé par Draven, un traître. Aelar localise la cache de Draven, vole le sac via le soupirail avec brio et s'échappe. Il lit le parchemin seul — découvre une liste de chantage et le nom de Valdren associé à un meurtre. Il choisit d'en informer Valdren en privé. Valdren révèle la vérité : il a tué un marchand exploiteur d'enfants il y a 12 ans, témoin Vara Zinn, crue morte mais en réalité vivante et manipulant Draven. Aelar est officiellement recruté dans la Guilde. Récompense : 20 pièces d'or. Prochaine étape : retrouver Vara Zinn.",
+  "dm_private_plot_matrix": {
+    "long_term_arc": "Vara Zinn n'est pas simplement une témoin — elle dirige une faction rivale qui cherche à prendre le contrôle de Valdris en éliminant tous les acteurs corrompus, y compris la Guilde. Son objectif final est ambigu : justice ou pouvoir ?",
+    "valdren_secret_depth": "Le meurtre de Valdren n'était pas aussi justifié qu'il le prétend. Le marchand avait une famille innocente. Un fils, aujourd'hui adulte, cherche lui aussi des réponses.",
+    "zara_secret": "Zara est la nièce de Vara Zinn. Elle infiltre la Guilde depuis deux ans. Elle ignore si elle doit protéger Aelar ou s'en servir.",
+    "parchemin_true_nature": "Le parchemin de chantage est une copie. L'original est entre les mains de Vara Zinn depuis des années. Draven ne le savait pas.",
+    "gemme_de_lune": "La Gemme de Lune volée par Zara n'est pas un simple test — elle contient une magie ancienne qui amplifie les sorts de divination. Valdren la voulait pour localiser Vara Zinn.",
+    "aelar_destiny_hook": "Le dialecte elfique archaïque du parchemin est celui d'une lignée magique spécifique — celle de la forêt natale d'Aelar. Ce n'est pas une coïncidence qu'il soit à Valdris."
+  }
+}
