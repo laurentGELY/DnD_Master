@@ -70,6 +70,7 @@
         .msg { display: flex; flex-direction: column; gap: 4px; }
         .msg-role { font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; }
         .msg.dm .msg-role     { color: #c9a96e; }
+        .turn-num { color: #5a5860; font-weight: 400; }
         .msg.player .msg-role { color: #6b8cba; }
         .msg-text { font-size: 14px; line-height: 1.75; color: #ffffff; }
         .msg.player .msg-text { color: #ffffff; }
@@ -337,6 +338,30 @@
             font-size: 10px; cursor: pointer; text-align: center;
         }
         .btn-rest:hover { border-color: #6b8cba; color: #6b8cba; }
+
+        /* ── Bannière d'erreur ── */
+        .error-banner {
+            flex-shrink: 0;
+            margin: 10px 0 0;
+            padding: 10px 14px;
+            background: #2a1010;
+            border: 0.5px solid #7a2020;
+            border-radius: 8px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+        .error-icon  { color: #c95a5a; font-size: 14px; flex-shrink: 0; padding-top: 1px; }
+        .error-body  { flex: 1; }
+        .error-title { font-size: 11px; font-weight: 600; color: #c95a5a;
+                       letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 3px; }
+        .error-msg   { font-size: 13px; color: #ffffff; line-height: 1.5; }
+        .btn-retry {
+            flex-shrink: 0; background: transparent; border: 0.5px solid #7a2020;
+            color: #c95a5a; border-radius: 6px; padding: 4px 12px;
+            font-size: 12px; cursor: pointer; white-space: nowrap;
+        }
+        .btn-retry:hover { border-color: #c95a5a; color: #ffffff; }
     </style>
 </head>
 <body>
@@ -362,11 +387,13 @@
     <div class="col-chat">
         <div class="chat" id="chat-history">
             {% if history %}
+                {% set ns = namespace(dm_turn=0) %}
                 {% for msg in history %}
+                    {% if msg.role == 'assistant' %}{% set ns.dm_turn = ns.dm_turn + 1 %}{% endif %}
                     {% if not loop.first %}<div class="divider"></div>{% endif %}
                     <div class="msg {{ 'player' if msg.role == 'user' else 'dm' }} {{ 'dm-msg' if msg.role == 'assistant' else '' }}"
                          {{ 'data-tts-auto="1"' | safe if (loop.last and msg.role == 'assistant') else '' }}>
-                        <div class="msg-role">{{ 'Joueur' if msg.role == 'user' else 'Dungeon Master' }}</div>
+                        <div class="msg-role">{% if msg.role == 'user' %}Joueur{% else %}Dungeon Master <span class="turn-num">#{{ ns.dm_turn }}</span>{% endif %}</div>
                         <div class="msg-text">{{ msg.content | replace('\n', '<br>') | safe }}</div>
                     </div>
                 {% endfor %}
@@ -374,6 +401,17 @@
                 <p class="empty-state">Commencez l'aventure — fournissez vos personnages en JSON ou tapez une action.</p>
             {% endif %}
         </div>
+
+        {% if last_error %}
+        <div class="error-banner">
+            <span class="error-icon">⚠</span>
+            <div class="error-body">
+                <div class="error-title">Erreur Ollama</div>
+                <div class="error-msg">{{ last_error }}</div>
+            </div>
+            <button class="btn-retry" onclick="retryLastInput()">↺ Retenter</button>
+        </div>
+        {% endif %}
 
         <div class="input-section">
 
@@ -548,6 +586,17 @@
 </div>
 
 <script>
+    // ── Retry après erreur Ollama ─────────────────────────────────────────────
+    const lastFailedInput = {{ (last_failed_input | tojson) if last_failed_input else 'null' }};
+
+    function retryLastInput() {
+        if (!lastFailedInput) return;
+        const ta   = document.getElementById('msg-input');
+        const form = ta.closest('form');
+        ta.value   = lastFailedInput;
+        form.submit();
+    }
+
     // ── État JS local ──────────────────────────────────────────────────────────
     // active_idx est injecté par Jinja2 — synchronisé avec le serveur au chargement.
     let activeIdx = {{ active_idx if active_idx is not none else 'null' }};

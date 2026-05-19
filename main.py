@@ -200,11 +200,13 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Session:
     """Tout l'état d'une session de jeu. Une instance par UUID cookie."""
-    conversations:    list[dict]           = field(default_factory=list)
-    party:            list[dict]           = field(default_factory=list)
-    active_character: int | None           = None
-    spell_slots_used: dict[str, list[int]] = field(default_factory=dict)
-    last_active:      float                = field(default_factory=time.monotonic)  # monotonic: immune to wall-clock adjustments
+    conversations:     list[dict]           = field(default_factory=list)
+    party:             list[dict]           = field(default_factory=list)
+    active_character:  int | None           = None
+    spell_slots_used:  dict[str, list[int]] = field(default_factory=dict)
+    last_active:       float                = field(default_factory=time.monotonic)  # monotonic: immune to wall-clock adjustments
+    last_error:        str | None           = None
+    last_failed_input: str | None           = None
 
 SESSIONS: dict[str, Session] = {}
 
@@ -738,9 +740,18 @@ async def call_ollama(messages: List[Dict[str, str]]) -> tuple[str, int, int]:
     except httpx.ConnectError:
         logger.error("Ollama non accessible")
         return "[ERREUR: Ollama non démarré — lancez 'ollama serve']", 0, 0
+    except httpx.TimeoutException:
+        logger.error("Ollama timeout")
+        return "[ERREUR: Délai dépassé — Ollama trop lent ou contexte trop long]", 0, 0
+    except httpx.HTTPStatusError as e:
+        body = e.response.text[:300]
+        logger.error(f"Ollama HTTP {e.response.status_code}: {body}")
+        return f"[ERREUR: HTTP {e.response.status_code} — {body}]", 0, 0
     except Exception as e:
-        logger.error(f"Erreur Ollama: {e}")
-        return f"[ERREUR: {e}]", 0, 0
+        err_type = type(e).__name__
+        detail   = str(e) or "(aucun détail)"
+        logger.error(f"Erreur Ollama ({err_type}): {detail}")
+        return f"[ERREUR: {err_type} — {detail}]", 0, 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -933,18 +944,26 @@ async def home(request: Request):
     total_chars = sum(len(msg["content"]) for msg in sess.conversations)
     spell_slots = get_slots_display(session_id)
 
+    # Lecture flash : on passe l'erreur au template puis on l'efface
+    last_error        = sess.last_error
+    last_failed_input = sess.last_failed_input
+    sess.last_error        = None
+    sess.last_failed_input = None
+
     response = templates.TemplateResponse(
         "index.html",
         {
-            "request":      request,
-            "history":      sess.conversations,
-            "party":        sess.party,
-            "active_idx":   sess.active_character,
-            "spell_slots":  spell_slots,
-            "session_id":   session_id[:8],
-            "total_chars":  total_chars,
-            "code_version": CODE_VERSION,
-            "ollama_model": OLLAMA_MODEL,
+            "request":           request,
+            "history":           sess.conversations,
+            "party":             sess.party,
+            "active_idx":        sess.active_character,
+            "spell_slots":       spell_slots,
+            "session_id":        session_id[:8],
+            "total_chars":       total_chars,
+            "code_version":      CODE_VERSION,
+            "ollama_model":      OLLAMA_MODEL,
+            "last_error":        last_error,
+            "last_failed_input": last_failed_input,
         },
     )
     if "session_id" not in request.cookies:
@@ -992,6 +1011,9 @@ async def send_message(request: Request, user_input: str = Form(...)):
         names = [char_name(c) for c in detected_party]
         logger.info(f"Groupe chargé: {names} — session {session_id[:8]}")
 
+    # Conserver l'input original pour le bouton "Retenter" en cas d'erreur
+    original_input = user_input
+
     # P2b — détection commande de repos
     rest_type = detect_rest_command(user_input)
     if rest_type:
@@ -1014,11 +1036,19 @@ async def send_message(request: Request, user_input: str = Form(...)):
     )
     reply, _, _ = await call_ollama(messages)
 
-    # Vérifier si c'est une erreur avant tout traitement (Step 5)
-    is_error = reply.startswith("[ERREUR:")
+    # Sur erreur : ne pas polluer l'historique, stocker pour affichage + retry
+    if reply.startswith("[ERREUR:"):
+        error_detail = reply[len("[ERREUR:"):-1].strip()
+        sess.last_error        = error_detail
+        sess.last_failed_input = original_input
+        logger.warning(f"Erreur Ollama stockée pour retry — session {session_id[:8]}: {error_detail}")
+        return RedirectResponse(url="/", status_code=303)
 
-    # Must happen after the [ERREUR: check above — strip_markdown would destroy that prefix.
-    # Stripping before storage ensures both the UI and TTS always see clean text.
+    # Succès — effacer l'état d'erreur précédent
+    sess.last_error        = None
+    sess.last_failed_input = None
+
+    # Must happen after the error check — strip_markdown would destroy the [ERREUR: prefix.
     reply = strip_markdown(reply)
 
     # P2a — si la réponse du DM introduit de nouveaux monstres via tag [COMBAT:]
@@ -1032,10 +1062,7 @@ async def send_message(request: Request, user_input: str = Form(...)):
     sess.conversations.append({"role": "user",      "content": user_input})
     sess.conversations.append({"role": "assistant", "content": reply_clean})
 
-    # Only advance on success: an Ollama error must not consume a player's turn,
-    # otherwise the next player would act without getting a DM response first.
-    if not is_error:
-        advance_active_character(session_id)
+    advance_active_character(session_id)
 
     logger.info(f"Tour ajouté — session {session_id[:8]}, {len(sess.conversations)} messages")
 
