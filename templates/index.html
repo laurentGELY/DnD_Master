@@ -9,7 +9,7 @@
 
         body {
             background: #0f0f13;
-            color: #e8e6e0;
+            color: #ffffff;
             font-family: system-ui, sans-serif;
             min-height: 100vh;
             display: flex;
@@ -26,7 +26,7 @@
             flex-shrink: 0;
         }
         .logo { font-size: 17px; font-weight: 500; color: #c9a96e; letter-spacing: 0.03em; }
-        .topbar-meta { font-size: 12px; color: #5a5860; display: flex; gap: 20px; align-items: center; }
+        .topbar-meta { font-size: 12px; color: #ffffff; display: flex; gap: 20px; align-items: center; }
 
         /* Indicateur du personnage actif dans la topbar */
         .active-indicator {
@@ -72,8 +72,8 @@
         .msg.dm .msg-role     { color: #c9a96e; }
         .msg.player .msg-role { color: #6b8cba; }
         .msg-text { font-size: 14px; line-height: 1.75; color: #ffffff; }
-        .msg.player .msg-text { color: #cce0ff; }
-        .empty-state { color: #3e3c44; font-size: 14px; font-style: italic; padding-top: 12px; }
+        .msg.player .msg-text { color: #ffffff; }
+        .empty-state { color: #ffffff; font-size: 14px; font-style: italic; padding-top: 12px; }
         .divider { height: 0.5px; background: #1a1820; flex-shrink: 0; }
 
         /* ── Zone de saisie ── */
@@ -95,13 +95,13 @@
         /* Boutons de sélection du personnage actif */
         .char-selector-label {
             font-size: 11px;
-            color: #3e3c44;
+            color: #ffffff;
             white-space: nowrap;
         }
         .btn-char {
             background: #17151f;
             border: 0.5px solid #2a2830;
-            color: #8a8690;
+            color: #ffffff;
             border-radius: 6px;
             padding: 4px 10px;
             font-size: 12px;
@@ -128,11 +128,11 @@
         }
 
         /* Barre de dés */
-        .dice-label { font-size: 11px; color: #3e3c44; white-space: nowrap; }
+        .dice-label { font-size: 11px; color: #ffffff; white-space: nowrap; }
         .btn-die {
             background: #17151f;
             border: 0.5px solid #2a2830;
-            color: #8a8690;
+            color: #ffffff;
             border-radius: 6px;
             padding: 4px 8px;
             font-size: 12px;
@@ -162,7 +162,7 @@
             background: #17151f;
             border: 0.5px solid #2a2830;
             border-radius: 8px;
-            color: #e8e6e0;
+            color: #ffffff;
             font-size: 14px;
             font-family: inherit;
             padding: 10px 14px;
@@ -172,7 +172,7 @@
             min-height: 68px;
         }
         .input-area textarea:focus { border-color: #4a4260; }
-        .input-area textarea::placeholder { color: #3e3c44; }
+        .input-area textarea::placeholder { color: #ffffff; }
 
         .btn-col { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
         .btn-send {
@@ -184,14 +184,14 @@
         .btn-send:active { transform: scale(0.98); }
         .btn-tts {
             background: transparent; border: 0.5px solid #2a2830;
-            color: #8a8690; border-radius: 8px; padding: 0 20px;
+            color: #ffffff; border-radius: 8px; padding: 0 20px;
             font-size: 13px; cursor: pointer; flex: 1; white-space: nowrap;
         }
         .btn-tts:hover   { border-color: #4a4260; color: #c9a96e; }
         .btn-tts.playing { color: #c9a96e; border-color: #c9a96e; }
         .voice-select {
             background: transparent; border: 0.5px solid #2a2830;
-            color: #8a8690; border-radius: 8px; padding: 0 8px;
+            color: #ffffff; border-radius: 8px; padding: 0 8px;
             font-size: 12px; cursor: pointer; flex: 1;
             appearance: none; -webkit-appearance: none;
             text-align: center;
@@ -249,42 +249,42 @@
         .char-card.active-card .active-badge { display: block; }
 
         .char-name {
-            font-size: 13px; font-weight: 500; color: #e8e6e0;
+            font-size: 13px; font-weight: 500; color: #ffffff;
             margin-bottom: 2px; white-space: nowrap;
             overflow: hidden; text-overflow: ellipsis;
             padding-right: 36px;   /* Espace pour le badge ACTIF */
         }
         .char-sub {
-            font-size: 11px; color: #5a5860; margin-bottom: 8px;
+            font-size: 11px; color: #ffffff; margin-bottom: 8px;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         .char-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
         .stat-block { display: flex; flex-direction: column; gap: 2px; }
-        .stat-label { font-size: 10px; color: #3e3c44; letter-spacing: 0.06em; }
+        .stat-label { font-size: 10px; color: #ffffff; letter-spacing: 0.06em; }
 
         .hp-row { display: flex; align-items: center; gap: 4px; }
         .hp-input {
             width: 36px; background: #0f0f13; border: 0.5px solid #2a2830;
-            border-radius: 4px; color: #e8e6e0; font-size: 13px;
+            border-radius: 4px; color: #ffffff; font-size: 13px;
             font-weight: 500; text-align: center; padding: 2px 4px; outline: none;
         }
         .hp-input:focus  { border-color: #c9a96e; }
         .hp-input.hp-high   { color: #6aad6a; }
         .hp-input.hp-medium { color: #c9a96e; }
         .hp-input.hp-low    { color: #c95a5a; }
-        .hp-max { font-size: 11px; color: #3e3c44; }
+        .hp-max { font-size: 11px; color: #ffffff; }
         .stat-value { font-size: 13px; font-weight: 500; color: #ffffff; }
 
         .ability-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 6px; }
         .ability-cell { background: #0f0f13; border-radius: 4px; padding: 3px 2px; text-align: center; }
-        .ability-name  { font-size: 9px;  color: #3e3c44; display: block; }
+        .ability-name  { font-size: 9px;  color: #ffffff; display: block; }
         .ability-score { font-size: 12px; color: #ffffff; font-weight: 500; display: block; }
-        .ability-mod   { font-size: 9px;  color: #5a5860; display: block; }
+        .ability-mod   { font-size: 9px;  color: #ffffff; display: block; }
 
-        .party-empty { font-size: 12px; color: #3e3c44; font-style: italic; line-height: 1.6; }
+        .party-empty { font-size: 12px; color: #ffffff; font-style: italic; line-height: 1.6; }
 
         /* Hint "Cliquez pour activer" */
-        .party-hint { font-size: 10px; color: #2a2830; text-align: center; margin-top: 4px; }
+        .party-hint { font-size: 10px; color: #ffffff; text-align: center; margin-top: 4px; }
 
         /* ── Statusbar ── */
         .statusbar {
@@ -295,15 +295,15 @@
             align-items: center;
             flex-shrink: 0;
         }
-        .stat      { font-size: 11px; color: #3e3c44; }
-        .stat span { color: #5a5860; }
+        .stat      { font-size: 11px; color: #ffffff; }
+        .stat span { color: #ffffff; }
         .btn-reset {
             margin-left: auto; font-size: 11px; color: #5a3a3a;
             background: none; border: none; cursor: pointer; padding: 2px 4px;
         }
         .btn-reset:hover { color: #a05050; }
-        .health-link { font-size: 11px; color: #3e3c44; text-decoration: none; margin-left: 4px; }
-        .health-link:hover { color: #5a5860; }
+        .health-link { font-size: 11px; color: #ffffff; text-decoration: none; margin-left: 4px; }
+        .health-link:hover { color: #ffffff; }
 
         /* ── Panneau sorts ── */
         .spells-section { margin-top: 12px; }
@@ -317,7 +317,7 @@
             display: flex; align-items: center; gap: 4px;
             margin-bottom: 3px;
         }
-        .slot-level-label { font-size: 10px; color: #3e3c44; width: 28px; flex-shrink: 0; }
+        .slot-level-label { font-size: 10px; color: #ffffff; width: 28px; flex-shrink: 0; }
         .slot-pips { display: flex; gap: 3px; }
         .slot-pip {
             width: 12px; height: 12px; border-radius: 50%;
@@ -333,7 +333,7 @@
         .rest-buttons { display: flex; gap: 6px; margin-top: 10px; }
         .btn-rest {
             flex: 1; background: transparent; border: 0.5px solid #2a2830;
-            color: #5a5860; border-radius: 6px; padding: 4px 6px;
+            color: #ffffff; border-radius: 6px; padding: 4px 6px;
             font-size: 10px; cursor: pointer; text-align: center;
         }
         .btn-rest:hover { border-color: #6b8cba; color: #6b8cba; }
