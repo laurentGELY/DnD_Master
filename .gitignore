@@ -8,3 +8,7 @@ Modelfile.txt
 dnd_app_architecture.svg
 memo_venv.txt
 .venv/
+
+# Runtime — logs et traces générés par l'app
+app.log
+perf_traces.jsonl
