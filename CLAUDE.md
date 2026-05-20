@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+> Référence d'architecture et de workflow. Pour les standards de log, failure modes, schéma de traces et Definition of Done → voir **`STANDARDS.md`**.
+
 ## Running the app
 
 ```bash
@@ -69,6 +71,7 @@ All tuneable parameters live in **`Config.yml`** (YAML, loaded at startup). Edit
 | `ollama.url` | `http://localhost:11434` | Ollama endpoint |
 | `ollama.model` | `dnd-dm-gemma4` | Model name (see Modelfiles) |
 | `ollama.keep_alive` | `30m` | Durée de maintien du modèle en VRAM |
+| `ollama.max_tokens` | `400` | Plafond tokens par réponse DM (`num_predict`) |
 | `tts.default_voice` | `fr_FR-gilles-low.onnx` | Piper voice |
 | `session.max_history_turns` | `50` | Sliding history window |
 | `session.max_user_input_len` | `2000` | Max chars per player message |
@@ -83,3 +86,15 @@ All tuneable parameters live in **`Config.yml`** (YAML, loaded at startup). Edit
 `init_spell_slots_for_party()` detects caster types (`full`, `half`, `warlock`, `third`) from `spells.json` class lists and pre-populates `_slots_max` on each character dict. The frontend calls `POST /spells/use` (delta ±1) to track usage; `build_slots_context()` injects available slots into Ollama context so the DM can enforce limits.
 
 Warlocks recover slots on short rest (`!rest`); all casters recover on long rest (`!longrest`).
+
+## Performance traces
+
+`perf_traces.jsonl` (project root) — one JSON line per exchange, written after every `/send_stream` response. Fields: `ts`, `session`, `model`, `context_t`, `ttft_s`, `load_s`, `prefill_s/tps`, `gen_s/tps`, `response_t`, `total_s`, `wall_s`, `capped`.
+
+Quick diagnostic:
+```bash
+grep "\[PERF\]" app.log
+jq -r '[.ts,.wall_s,.response_t,.gen_tps,.capped] | @tsv' perf_traces.jsonl
+```
+
+Full grep commands and analysis queries → `STANDARDS.md § Fichier de traces de performance`.
