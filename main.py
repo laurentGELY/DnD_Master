@@ -737,10 +737,16 @@ async def call_ollama(messages: List[Dict[str, str]]) -> tuple[str, int, int]:
         prompt_tokens   = data.get("prompt_eval_count", 0)
         response_tokens = data.get("eval_count", 0)
         reply           = data["message"]["content"]
-        tps             = response_tokens / elapsed if elapsed > 0 else 0
+        load_s          = data.get("load_duration",        0) / 1e9
+        prefill_s       = data.get("prompt_eval_duration", 0) / 1e9
+        gen_s           = data.get("eval_duration",        0) / 1e9
+        prefill_tps     = prompt_tokens   / prefill_s if prefill_s > 0 else 0
+        gen_tps         = response_tokens / gen_s     if gen_s     > 0 else 0
         logger.info(
-            f"[PERF] Ollama: {elapsed:.1f}s | "
-            f"prompt={prompt_tokens}t réponse={response_tokens}t ({tps:.1f} t/s)"
+            f"[PERF] Ollama: total={elapsed:.1f}s | "
+            f"chargement={load_s:.1f}s | "
+            f"analyse={prefill_s:.1f}s ({prefill_tps:.0f} t/s, {prompt_tokens}t) | "
+            f"réponse={gen_s:.1f}s ({gen_tps:.0f} t/s, {response_tokens}t)"
         )
         return reply, prompt_tokens, response_tokens
     except httpx.ConnectError:
@@ -1145,13 +1151,19 @@ async def send_message_stream(request: Request, user_input: str = Form(...)):
                         accumulated.append(token)
                         yield f"data: {json.dumps({'token': token})}\n\n"
                     if chunk.get("done"):
-                        prompt_t   = chunk.get("prompt_eval_count", 0)
-                        response_t = chunk.get("eval_count", 0)
-                        elapsed    = chunk.get("total_duration", 0) / 1e9
-                        tps        = response_t / elapsed if elapsed > 0 else 0
+                        prompt_t    = chunk.get("prompt_eval_count", 0)
+                        response_t  = chunk.get("eval_count", 0)
+                        elapsed     = chunk.get("total_duration",        0) / 1e9
+                        load_s      = chunk.get("load_duration",         0) / 1e9
+                        prefill_s   = chunk.get("prompt_eval_duration",  0) / 1e9
+                        gen_s       = chunk.get("eval_duration",         0) / 1e9
+                        prefill_tps = prompt_t   / prefill_s if prefill_s > 0 else 0
+                        gen_tps     = response_t / gen_s     if gen_s     > 0 else 0
                         logger.info(
-                            f"[PERF] Ollama stream: {elapsed:.1f}s | "
-                            f"prompt={prompt_t}t réponse={response_t}t ({tps:.1f} t/s)"
+                            f"[PERF] Ollama stream: total={elapsed:.1f}s | "
+                            f"chargement={load_s:.1f}s | "
+                            f"analyse={prefill_s:.1f}s ({prefill_tps:.0f} t/s, {prompt_t}t) | "
+                            f"réponse={gen_s:.1f}s ({gen_tps:.0f} t/s, {response_t}t)"
                         )
                         complete   = strip_markdown("".join(accumulated))
                         reply_clean = re.sub(r'\[COMBAT:[^\]]*\]', '', complete).strip()
