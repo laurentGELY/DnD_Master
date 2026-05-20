@@ -843,15 +843,22 @@ async def _cleanup_sessions() -> None:
 
 
 async def _prewarm_model() -> None:
+    t0_warm = time.perf_counter()
+    logger.info(f"Pré-chargement {OLLAMA_MODEL} démarré…")
     try:
         await _ollama_client.post(
             "/api/generate",
             json={"model": OLLAMA_MODEL, "prompt": "", "keep_alive": OLLAMA_KEEP_ALIVE},
-            timeout=httpx.Timeout(connect=5.0, read=60.0, write=5.0, pool=5.0),
+            timeout=httpx.Timeout(connect=5.0, read=120.0, write=5.0, pool=5.0),
         )
-        logger.info(f"Modèle {OLLAMA_MODEL} pré-chargé en mémoire GPU")
-    except Exception:
-        logger.warning("Pré-chargement Ollama échoué — le modèle sera chargé à la première requête")
+        elapsed_warm = time.perf_counter() - t0_warm
+        logger.info(f"[PERF] Pré-chargement {OLLAMA_MODEL} terminé ({elapsed_warm:.1f}s) — modèle en VRAM")
+    except Exception as e:
+        elapsed_warm = time.perf_counter() - t0_warm
+        logger.warning(
+            f"[PERF] Pré-chargement Ollama échoué après {elapsed_warm:.1f}s ({type(e).__name__}: {e}) "
+            "— le modèle sera chargé à la première requête"
+        )
 
 
 @asynccontextmanager
@@ -1099,6 +1106,8 @@ async def send_message_stream(request: Request, user_input: str = Form(...)):
     L'état de session est mis à jour côté serveur à la fin du stream.
     En cas d'erreur, renvoie un événement SSE {"error": "..."} sans polluer l'historique.
     """
+    t0_request = time.perf_counter()
+
     if len(user_input) > MAX_USER_INPUT_LEN:
         user_input = user_input[:MAX_USER_INPUT_LEN]
 
@@ -1130,8 +1139,13 @@ async def send_message_stream(request: Request, user_input: str = Form(...)):
         combat_monsters=combat_monsters if combat_monsters else None,
     )
 
+    t_ready = time.perf_counter() - t0_request
+    logger.info(f"[PERF] /send_stream contexte prêt: {t_ready:.3f}s — session {session_id[:8]}")
+
     async def event_stream() -> AsyncGenerator[str, None]:
         accumulated: list[str] = []
+        first_token_logged = False
+        t0_stream = time.perf_counter()
         try:
             async with _ollama_client.stream(
                 "POST", "/api/chat",
@@ -1148,6 +1162,10 @@ async def send_message_stream(request: Request, user_input: str = Form(...)):
                         continue
                     token = chunk.get("message", {}).get("content", "")
                     if token:
+                        if not first_token_logged:
+                            ttft = time.perf_counter() - t0_stream
+                            logger.info(f"[PERF] TTFT: {ttft:.2f}s — session {session_id[:8]}")
+                            first_token_logged = True
                         accumulated.append(token)
                         yield f"data: {json.dumps({'token': token})}\n\n"
                     if chunk.get("done"):
@@ -1159,12 +1177,19 @@ async def send_message_stream(request: Request, user_input: str = Form(...)):
                         gen_s       = chunk.get("eval_duration",         0) / 1e9
                         prefill_tps = prompt_t   / prefill_s if prefill_s > 0 else 0
                         gen_tps     = response_t / gen_s     if gen_s     > 0 else 0
+                        total_wall  = time.perf_counter() - t0_request
                         logger.info(
                             f"[PERF] Ollama stream: total={elapsed:.1f}s | "
                             f"chargement={load_s:.1f}s | "
                             f"analyse={prefill_s:.1f}s ({prefill_tps:.0f} t/s, {prompt_t}t) | "
                             f"réponse={gen_s:.1f}s ({gen_tps:.0f} t/s, {response_t}t)"
                         )
+                        if load_s > 5.0:
+                            logger.warning(
+                                f"[PERF] Modèle non en VRAM au moment de la requête "
+                                f"(chargement={load_s:.1f}s) — vérifier préchauffage"
+                            )
+                        logger.info(f"[PERF] /send_stream total mur: {total_wall:.1f}s — session {session_id[:8]}")
                         complete   = strip_markdown("".join(accumulated))
                         reply_clean = re.sub(r'\[COMBAT:[^\]]*\]', '', complete).strip()
                         sess.conversations.append({"role": "user",      "content": user_input})
