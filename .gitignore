@@ -11,4 +11,5 @@ memo_venv.txt
 
 # Runtime — logs et traces générés par l'app
 app.log
+app.log.*
 perf_traces.jsonl

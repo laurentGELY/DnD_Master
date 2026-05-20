@@ -60,6 +60,7 @@ import uuid
 import logging
 import re
 from datetime import datetime, timezone
+from logging.handlers import RotatingFileHandler
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -201,10 +202,25 @@ _HALF_CASTER_CLASSES:  list[str] = SPELLS_DB.get("half_casters",  {}).get("_clas
 _WARLOCK_CLASSES:      list[str] = SPELLS_DB.get("warlock",       {}).get("_classes", [])
 _THIRD_CASTER_CLASSES: list[str] = SPELLS_DB.get("third_casters", {}).get("_classes", [])
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
+def _setup_logging() -> None:
+    fmt  = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    if not root.handlers:   # évite les doublons lors des rechargements --reload
+        root.addHandler(logging.StreamHandler())
+    # Fichier toujours actif — rotation 5 Mo × 5 fichiers (max 30 Mo)
+    fh = RotatingFileHandler(
+        BASE_DIR / "app.log", mode="a", maxBytes=5 * 1024 * 1024,
+        backupCount=5, encoding="utf-8",
+    )
+    fh.setFormatter(fmt)
+    # Retirer l'éventuel FileHandler précédent (rechargement --reload) avant d'en ajouter un nouveau
+    root.handlers = [h for h in root.handlers if not isinstance(h, RotatingFileHandler)]
+    root.addHandler(fh)
+    for h in root.handlers:
+        h.setFormatter(fmt)
+
+_setup_logging()
 logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════════════════════
