@@ -802,8 +802,9 @@ async def maybe_compact_history(session_id: str) -> None:
     to_compact = sess.conversations[:-COMPACT_KEEP_RECENT]
     to_keep    = sess.conversations[-COMPACT_KEEP_RECENT:]
 
+    t0_compact = time.perf_counter()
     logger.info(
-        f"Compaction déclenchée — session {session_id[:8]}: "
+        f"[COMPACT] Déclenchée — session {session_id[:8]}: "
         f"{len(to_compact)} messages → résumé + {len(to_keep)} récents"
     )
 
@@ -827,7 +828,10 @@ async def maybe_compact_history(session_id: str) -> None:
     summary, _, _ = await call_ollama(summary_messages, max_tokens=None)
 
     if summary.startswith("[ERREUR:"):
-        logger.warning("Compaction échouée (erreur Ollama) — historique conservé intact")
+        logger.warning(
+            f"[COMPACT] Échouée après {time.perf_counter() - t0_compact:.1f}s (erreur Ollama) "
+            f"— historique conservé intact — session {session_id[:8]}"
+        )
         return
 
     summary_msg = {
@@ -836,7 +840,7 @@ async def maybe_compact_history(session_id: str) -> None:
     }
     sess.conversations = [summary_msg] + to_keep
     logger.info(
-        f"Compaction terminée — session {session_id[:8]}: "
+        f"[PERF] [COMPACT] Terminée en {time.perf_counter() - t0_compact:.1f}s — session {session_id[:8]}: "
         f"historique réduit à {len(sess.conversations)} messages"
     )
 
@@ -1130,6 +1134,16 @@ async def send_message_stream(request: Request, user_input: str = Form(...)):
     sess           = get_session(session_id)
     original_input = user_input
 
+    active_name = (
+        char_name(sess.party[sess.active_character])
+        if sess.party and sess.active_character is not None
+        else "aucun"
+    )
+    logger.info(
+        f"[SESSION] {session_id[:8]} | groupe: {len(sess.party)} perso(s) | "
+        f"historique: {len(sess.conversations)} msgs | actif: {active_name}"
+    )
+
     detected_party = extract_party_from_input(user_input)
     if detected_party:
         sess.party            = detected_party
@@ -1160,6 +1174,7 @@ async def send_message_stream(request: Request, user_input: str = Form(...)):
     async def event_stream() -> AsyncGenerator[str, None]:
         accumulated: list[str] = []
         first_token_logged = False
+        ttft_actual: float | None = None
         t0_stream = time.perf_counter()
         try:
             async with _ollama_client.stream(
@@ -1169,6 +1184,7 @@ async def send_message_stream(request: Request, user_input: str = Form(...)):
                       "options": {"num_predict": OLLAMA_MAX_TOKENS}},
             ) as response:
                 response.raise_for_status()
+                logger.info(f"[STREAM] Ollama connecté ({time.perf_counter() - t0_stream:.2f}s) — session {session_id[:8]}")
                 async for raw_line in response.aiter_lines():
                     if not raw_line:
                         continue
@@ -1179,12 +1195,13 @@ async def send_message_stream(request: Request, user_input: str = Form(...)):
                     token = chunk.get("message", {}).get("content", "")
                     if token:
                         if not first_token_logged:
-                            ttft = time.perf_counter() - t0_stream
-                            logger.info(f"[PERF] TTFT: {ttft:.2f}s — session {session_id[:8]}")
+                            ttft_actual = time.perf_counter() - t0_stream
+                            logger.info(f"[PERF] TTFT: {ttft_actual:.2f}s — session {session_id[:8]}")
                             first_token_logged = True
                         accumulated.append(token)
                         yield f"data: {json.dumps({'token': token})}\n\n"
                     if chunk.get("done"):
+                        done_reason = chunk.get("done_reason", "unknown")
                         prompt_t    = chunk.get("prompt_eval_count", 0)
                         response_t  = chunk.get("eval_count", 0)
                         elapsed     = chunk.get("total_duration",        0) / 1e9
@@ -1194,17 +1211,23 @@ async def send_message_stream(request: Request, user_input: str = Form(...)):
                         prefill_tps = prompt_t   / prefill_s if prefill_s > 0 else 0
                         gen_tps     = response_t / gen_s     if gen_s     > 0 else 0
                         total_wall  = time.perf_counter() - t0_request
-                        ttft_val    = round(time.perf_counter() - t0_stream - gen_s, 2) if first_token_logged else None
+                        ttft_val    = round(ttft_actual, 2) if ttft_actual is not None else None
                         logger.info(
                             f"[PERF] Ollama stream: total={elapsed:.1f}s | "
                             f"chargement={load_s:.1f}s | "
                             f"analyse={prefill_s:.1f}s ({prefill_tps:.0f} t/s, {prompt_t}t) | "
-                            f"réponse={gen_s:.1f}s ({gen_tps:.0f} t/s, {response_t}t)"
+                            f"réponse={gen_s:.1f}s ({gen_tps:.0f} t/s, {response_t}t) | "
+                            f"fin={done_reason}"
                         )
                         if load_s > 5.0:
                             logger.warning(
                                 f"[PERF] Modèle non en VRAM au moment de la requête "
                                 f"(chargement={load_s:.1f}s) — vérifier préchauffage"
+                            )
+                        if done_reason == "length":
+                            logger.warning(
+                                f"[PERF] Réponse DM tronquée (done_reason=length, {response_t}t) "
+                                f"— augmenter ollama.max_tokens si le DM est souvent coupé"
                             )
                         logger.info(f"[PERF] /send_stream total mur: {total_wall:.1f}s — session {session_id[:8]}")
                         _write_trace({
@@ -1219,9 +1242,10 @@ async def send_message_stream(request: Request, user_input: str = Form(...)):
                             "gen_s":        round(gen_s,       2),
                             "gen_tps":      round(gen_tps,     0),
                             "response_t":   response_t,
+                            "done_reason":  done_reason,
                             "total_s":      round(elapsed,     2),
                             "wall_s":       round(total_wall,  2),
-                            "capped":       response_t >= OLLAMA_MAX_TOKENS,
+                            "capped":       done_reason == "length",
                         })
                         complete   = strip_markdown("".join(accumulated))
                         reply_clean = re.sub(r'\[COMBAT:[^\]]*\]', '', complete).strip()
