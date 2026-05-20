@@ -10,6 +10,7 @@ ollama:
   # model:    "dnd-dm-magistral"   # Magistral 24B — recommended for combat-heavy sessions
   # model:    "dnd-dm-8b"          # Llama 3.1 8B — fast fallback
   keep_alive: "30m"                # Keep model in VRAM between turns
+  max_tokens: 400                  # Plafond de tokens par réponse DM (~21s à 19 t/s)
 
 tts:
   default_voice: "fr_FR-gilles-low.onnx"

@@ -97,7 +97,8 @@ CODE_VERSION        = _CFG.get("app",               {}).get("version",          
 
 OLLAMA_URL        = os.getenv("OLLAMA_URL",   _CFG.get("ollama", {}).get("url",        "http://localhost:11434"))
 OLLAMA_MODEL      = os.getenv("OLLAMA_MODEL", _CFG.get("ollama", {}).get("model",      "dnd-dm-magistral"))
-OLLAMA_KEEP_ALIVE =                           _CFG.get("ollama", {}).get("keep_alive", "30m")
+OLLAMA_KEEP_ALIVE  =                           _CFG.get("ollama", {}).get("keep_alive",  "30m")
+OLLAMA_MAX_TOKENS  =                           _CFG.get("ollama", {}).get("max_tokens",  400)
 
 DEFAULT_VOICE       = _CFG.get("tts",                {}).get("default_voice",      "fr_FR-gilles-low.onnx")
 
@@ -719,17 +720,19 @@ def build_messages(
 _ollama_client: httpx.AsyncClient | None = None
 
 
-async def call_ollama(messages: List[Dict[str, str]]) -> tuple[str, int, int]:
+async def call_ollama(messages: List[Dict[str, str]], max_tokens: int | None = OLLAMA_MAX_TOKENS) -> tuple[str, int, int]:
     if os.getenv("OLLAMA_MOCK"):
         reply = os.getenv("OLLAMA_MOCK_REPLY", "Réponse simulée du Maître du Donjon.")
         logger.info("[MOCK] Ollama mock actif — réponse fixe")
         return reply, 0, 0
     try:
-        t0   = time.perf_counter()
+        t0      = time.perf_counter()
+        options = {"num_predict": max_tokens} if max_tokens is not None else {}
         resp = await _ollama_client.post(
             "/api/chat",
             json={"model": OLLAMA_MODEL, "messages": messages, "stream": False,
-                  "keep_alive": OLLAMA_KEEP_ALIVE},
+                  "keep_alive": OLLAMA_KEEP_ALIVE,
+                  **({"options": options} if options else {})},
         )
         resp.raise_for_status()
         elapsed         = time.perf_counter() - t0
@@ -809,7 +812,7 @@ async def maybe_compact_history(session_id: str) -> None:
         },
     ]
 
-    summary, _, _ = await call_ollama(summary_messages)
+    summary, _, _ = await call_ollama(summary_messages, max_tokens=None)
 
     if summary.startswith("[ERREUR:"):
         logger.warning("Compaction échouée (erreur Ollama) — historique conservé intact")
@@ -1150,7 +1153,8 @@ async def send_message_stream(request: Request, user_input: str = Form(...)):
             async with _ollama_client.stream(
                 "POST", "/api/chat",
                 json={"model": OLLAMA_MODEL, "messages": messages, "stream": True,
-                      "keep_alive": OLLAMA_KEEP_ALIVE},
+                      "keep_alive": OLLAMA_KEEP_ALIVE,
+                      "options": {"num_predict": OLLAMA_MAX_TOKENS}},
             ) as response:
                 response.raise_for_status()
                 async for raw_line in response.aiter_lines():
