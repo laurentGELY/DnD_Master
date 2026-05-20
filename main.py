@@ -59,6 +59,7 @@ import tempfile
 import uuid
 import logging
 import re
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -126,6 +127,17 @@ SPELLS_PATH   = BASE_DIR / "data" / "spells.json"
 
 PARTY_REQUIRED_KEYS = {"name", "race", "class", "level", "HP", "AC",
                        "classe", "niveau", "hp", "ac", "hit_points"}
+
+TRACES_PATH = BASE_DIR / "perf_traces.jsonl"
+
+
+def _write_trace(record: dict) -> None:
+    """Ajoute une ligne JSON dans perf_traces.jsonl. Silencieux en cas d'erreur disque."""
+    try:
+        with open(TRACES_PATH, "a", encoding="utf-8") as _tf:
+            _tf.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception as _e:
+        logger.warning(f"Écriture trace échouée: {_e}")
 
 
 class Character(BaseModel):
@@ -1182,6 +1194,7 @@ async def send_message_stream(request: Request, user_input: str = Form(...)):
                         prefill_tps = prompt_t   / prefill_s if prefill_s > 0 else 0
                         gen_tps     = response_t / gen_s     if gen_s     > 0 else 0
                         total_wall  = time.perf_counter() - t0_request
+                        ttft_val    = round(time.perf_counter() - t0_stream - gen_s, 2) if first_token_logged else None
                         logger.info(
                             f"[PERF] Ollama stream: total={elapsed:.1f}s | "
                             f"chargement={load_s:.1f}s | "
@@ -1194,6 +1207,22 @@ async def send_message_stream(request: Request, user_input: str = Form(...)):
                                 f"(chargement={load_s:.1f}s) — vérifier préchauffage"
                             )
                         logger.info(f"[PERF] /send_stream total mur: {total_wall:.1f}s — session {session_id[:8]}")
+                        _write_trace({
+                            "ts":           datetime.now(timezone.utc).isoformat(),
+                            "session":      session_id[:8],
+                            "model":        OLLAMA_MODEL,
+                            "context_t":    prompt_t,
+                            "ttft_s":       ttft_val,
+                            "load_s":       round(load_s,      2),
+                            "prefill_s":    round(prefill_s,   2),
+                            "prefill_tps":  round(prefill_tps, 0),
+                            "gen_s":        round(gen_s,       2),
+                            "gen_tps":      round(gen_tps,     0),
+                            "response_t":   response_t,
+                            "total_s":      round(elapsed,     2),
+                            "wall_s":       round(total_wall,  2),
+                            "capped":       response_t >= OLLAMA_MAX_TOKENS,
+                        })
                         complete   = strip_markdown("".join(accumulated))
                         reply_clean = re.sub(r'\[COMBAT:[^\]]*\]', '', complete).strip()
                         sess.conversations.append({"role": "user",      "content": user_input})
